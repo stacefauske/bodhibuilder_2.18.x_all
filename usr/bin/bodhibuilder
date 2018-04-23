@@ -165,6 +165,7 @@ else
     BASEWORKDIR="${WORKDIR}"
     WORKDIR="${WORKDIR}/bodhibuilder"
 fi
+
 if [ ! -d ${WORKDIR} ] ; then
     mkdir -p ${WORKDIR}
     if [ ! -d ${WORKDIR} ] ; then
@@ -183,6 +184,7 @@ cd ${WORKDIR}
 if [ -f ${WORKDIR}/bodhibuilder.log ] ; then
     rm -f ${WORKDIR}/bodhibuilder.log &> /dev/null
 fi
+
 touch ${WORKDIR}/bodhibuilder.log
 cat > ${WORKDIR}/bodhibuilder.log <<FOO
 
@@ -424,7 +426,7 @@ if [ "${OPT1}" == "dist" ] ; then
     read -n1 redy
     exit 1
   else
-    log_msg " GID & UID 999 are not in use, OK"
+    log_msg " GID & UID 999 are not in use, that's good"
   fi
 fi
 
@@ -657,8 +659,8 @@ log_msg "${WORKDIR} is on a ${DIRTYPE} filesystem"
         rm -rf ${WORKDIR}/dummysys/var/lib/AccountsService/users/*
         rm -rf ${WORKDIR}/dummysys/var/lib/kdm/*
         rm -rf ${WORKDIR}/dummysys/var/run/console/*
-        rm -f ${WORKDIR}/dummysys/etc/gdm/gdm.conf-custom
-        rm -f ${WORKDIR}/dummysys/etc/gdm/custom.conf
+#        rm -f ${WORKDIR}/dummysys/etc/gdm/gdm.conf-custom
+        rm -f ${WORKDIR}/dummysys/etc/gdm3/custom.conf
         if [ ! -d /run ] ; then
             find ${WORKDIR}/dummysys/var/run/ ${WORKDIR}/dummysys/var/mail/ ${WORKDIR}/dummysys/var/spool/ -type f -exec rm -f {} \;
         else
@@ -788,19 +790,32 @@ log_msg "${WORKDIR} is on a ${DIRTYPE} filesystem"
       apt-get update >>${WORKDIR}/bodhibuilder.log
       log_msg "Installing dpkg-dev if it's not already installed"
       apt-get install -y -q --no-install-recommends dpkg-dev >>${WORKDIR}/bodhibuilder.log #CHARLES
-      if [ "${UBUVERSION}" -gt 14 ] ; then
-        log_msg "Installing isolinux"
-        apt-get install isolinux
-      fi
+      # removing code below, isolinux is a dependency as of U16.x
+      #~ if [ "${UBUVERSION}" -gt 14 ] ; then
+        #~ log_msg "Installing isolinux"
+        #~ apt-get install isolinux
+      #~ fi
 
 
       # packages to be downloaded and moved into pool: -- 32/64-bit -- ONE directory
-      if [ "${UBUVERSION}" -le 14 ] ; then
+      if [ "${UBUVERSION}" -le 14 ] ; then # legacy list of packages for Ubuntu 14.x and earlier
         dlpkg_32="b43-fwcutter bcmwl-kernel-source dkms efibootmgr fakeroot grub-common grub-efi grub-efi-amd64 grub-efi-amd64-bin grub-efi-ia32 grub-efi-ia32-bin grub-pc grub-pc-bin grub2-common libfakeroot libuniconf4.6 libwvstreams4.6-base libwvstreams4.6-extras lupin-support mouseemu oem-config oem-config-gtk oem-config-slideshow-ubuntu secureboot-db setserial user-setup wvdial" # 32-bit packages
         dlpkg_64="grub-efi-amd64-signed shim shim-signed" # 64-bit packages
-      else
+      elif [ "${UBUVERSION}" -le 16 ] ; then # list of packages for Ubuntu 16.x
         dlpkg_32="b43-fwcutter bcmwl-kernel-source dkms efibootmgr fakeroot grub-common grub-efi grub-efi-amd64 grub-efi-amd64-bin grub-efi-ia32 grub-efi-ia32-bin grub-pc grub-pc-bin grub2-common libfakeroot libuniconf4.6 libwvstreams4.6-base libwvstreams4.6-extras lupin-support mokutil mouseemu oem-config oem-config-gtk oem-config-slideshow-ubuntu sbsigntool secureboot-db setserial user-setup wvdial" # 32-bit packages
         dlpkg_64="grub-efi-amd64-signed shim shim-signed" # 64-bit packages
+      else # Ubuntu 18.x
+        #~ dlpkg_32="b43-fwcutter bcmwl-kernel-source dkms efibootmgr fakeroot grub-common grub-efi grub-efi-amd64 grub-efi-amd64-bin grub-efi-ia32 grub-efi-ia32-bin grub-pc grub-pc-bin grub2-common libfakeroot libuniconf4.6 libwvstreams4.6-base libwvstreams4.6-extras lupin-support mokutil mouseemu oem-config oem-config-gtk oem-config-slideshow-ubuntu sbsigntool secureboot-db setserial user-setup wvdial" # 32-bit packages
+        #~ dlpkg_64="grub-efi-amd64-signed shim shim-signed" # 64-bit packages
+        case ${ARCH} in # New in U18.x, use the 00_packages.list files to determine which debs to download. Managing this list in those files now.
+          amd64 )
+            dlpkg_32=""
+            dlpkg_64=`cat /etc/bodhibuilder/debs/amd64/00_packages.list`
+          ;;
+          * )
+            dlpkg_32=`cat etc/bodhibuilder/debs/i386/00_packages.list`
+          ;;
+        esac
       fi
       case ${ARCH} in
         amd64 )
@@ -879,7 +894,12 @@ log_msg "${WORKDIR} is on a ${DIRTYPE} filesystem"
     #  Note: in order for this to work correctly, the source system
     #        must be completely upgraded, as in 'apt-get dist-upgrade'
     log_msg "Creating a Packages.gz repository for the Ubiquity install"
-    rm -f ${WORKDIR}/ISOTMP/dists/Packages.gz
+    # kamwoods - "dists" dir not being created in ISOTMP
+    if [ -e "${WORKDIR}/ISOTMP/dists" ] ; then
+      rm -f ${WORKDIR}/ISOTMP/dists/Packages.gz
+    else
+      mkdir ${WORKDIR}/ISOTMP/dists
+    fi
     cd ${WORKDIR}/ISOTMP/
     dpkg-scanpackages pool /dev/null 2>>${WORKDIR}/bodhibuilder.log | gzip -9c > ./dists/Packages.gz
     cd -
@@ -1295,12 +1315,13 @@ FOO
 
 
     # set the mksquashfs command
+    #  2018-03-27 - added "/swapfile" to exclusions as per kamwoods
     case ${OPT1} in
       backup )
-        squashcmd="mksquashfs ${REALFOLDERS} ${WORKDIR}/ISOTMP/casper/filesystem.squashfs ${SQUASHFSOPTS} -e root/.local/Trash root/.thumbnails root/.cache root/.bash_history root/.lesshst root/.nano_history /boot/grub /usr/share/applications/bodhibuilder-gtk.desktop ${BASEWORKDIR} ${EXCLUDEICONS} ${EXCLUDELOCALES} ${EXCLUDES} 2>>${WORKDIR}/bodhibuilder.log"
+        squashcmd="mksquashfs ${REALFOLDERS} ${WORKDIR}/ISOTMP/casper/filesystem.squashfs ${SQUASHFSOPTS} -e root/.local/Trash root/.thumbnails root/.cache root/.bash_history root/.lesshst root/.nano_history /boot/grub /usr/share/applications/bodhibuilder-gtk.desktop /swapfile ${BASEWORKDIR} ${EXCLUDEICONS} ${EXCLUDELOCALES} ${EXCLUDES} 2>>${WORKDIR}/bodhibuilder.log"
       ;;
       * )
-        squashcmd="mksquashfs ${REALFOLDERS} ${WORKDIR}/ISOTMP/casper/filesystem.squashfs ${SQUASHFSOPTS} -e root/.local/Trash root/.thumbnails root/.cache root/.bash_history root/.lesshst root/.nano_history /boot/grub /usr/share/applications/bodhibuilder-gtk.desktop ${BASEWORKDIR} ${EXCLUDEICONS} ${EXCLUDELOCALES} ${EXCLUDES} 2>>${WORKDIR}/bodhibuilder.log"
+        squashcmd="mksquashfs ${REALFOLDERS} ${WORKDIR}/ISOTMP/casper/filesystem.squashfs ${SQUASHFSOPTS} -e root/.local/Trash root/.thumbnails root/.cache root/.bash_history root/.lesshst root/.nano_history /boot/grub /usr/share/applications/bodhibuilder-gtk.desktop /swapfile ${BASEWORKDIR} ${EXCLUDEICONS} ${EXCLUDELOCALES} ${EXCLUDES} 2>>${WORKDIR}/bodhibuilder.log"
       ;;
     esac
     echo "mksquashfs command:" >>${WORKDIR}/bodhibuilder.log

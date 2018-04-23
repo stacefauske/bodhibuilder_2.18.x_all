@@ -1,0 +1,20 @@
+Notes for bodhibuilder 2.18.x
+
+Create file /etc/bodhibuilder/uefi/ISOLINUX/isohdpfx.bin like this
+  >    dd bs=512 count=1 if=/etc/bodhibuilder/uefi/ISOLINUX/isolinux.bin of=/etc/bodhibuilder/uefi/ISOLINUX/isohdpfx.bin
+
+NEED TO -- fix the 10 minute screen timeout in the created ISO.
+
+NEED TO -- figure out how to get a UEFI spin to install on a non-UEFI machine.  (low priority)
+
+NEED TO -- add a '-u' option to update the deb files that are in /etc/bodhibuilder/debs/{amd64,i386}/
+            but first, before updating those debs, the current linux system needs to be up to date
+            1. do an 'apt-get update'
+            2. check to see if there are any updates available through apt-get
+                apt list --upgradable    OR
+                apt-get -s dist-upgrade    OR
+                sudo apt-get -V -u dist-upgrade --assume-no | grep '^.*upgraded.*newly installed.*to remove.*not upgraded'    (a formatted version of this is probably the best option)    OR
+                sudo apt-get -V -u dist-upgrade --assume-no | tail -n+6 | head -n-5 | awk '{print$1}'    OR
+                sudo apt-get -V -u dist-upgrade --assume-no | tail -n+6 | head -n-5 | awk '{print$1}' | tr '\n' '\ '
+            3. download the new deb files only if the system is fully dist-upgraded
+            

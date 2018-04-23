@@ -37,6 +37,8 @@ fi
   #~ echo "fs0:\EFI\ubuntu\grubia32.efi" >> /target/boot/efi/startup.nsh
 #~ fi
 
+# Don't rm the following files for Backup mode. They're already handled
+# for dist mode in the main script.
 
-rm -f /target/etc/gdm/custom.conf
-rm -f /target/etc/mdm/mdm.conf
+#rm -f /target/etc/gdm3/custom.conf
+#rm -f /target/etc/mdm/mdm.conf
