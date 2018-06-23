@@ -36,11 +36,21 @@ do_start() {
         update-grub
         
         ################################################
+        ### CUSTOM COMMANDS
+        #
+        # NOTE: Please do not add any custom repositories
+        #       or comments for them here.
+        #       Instead, put them into the file:
+        #         /etc/bodhibuilder/apt/custom_repos
+        #       This script will append everything in that
+        #       file to the existing /etc/apt/sources.list
+        #       file. Thanks.
+        #
+        # Commands entered into this file will be run only
+        # once - after the system has been installed and
+        # booted for the first time, and never again.
+        #
         ### Place your custom commands below this line
-        # Please add custom repositories and comments for them into the file
-        #   /etc/bodhibuilder/apt/custom_repos
-        # This script will append everything in that file to the
-        # existing /etc/apt/sources.list file
         
         ### Place your custom commands above this line
         ################################################

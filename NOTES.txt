@@ -1,11 +1,13 @@
 Notes for bodhibuilder 2.18.x
 
-Create file /etc/bodhibuilder/uefi/ISOLINUX/isohdpfx.bin like this
+*HOW TO -- Create file /etc/bodhibuilder/uefi/ISOLINUX/isohdpfx.bin like this
   >    dd bs=512 count=1 if=/etc/bodhibuilder/uefi/ISOLINUX/isolinux.bin of=/etc/bodhibuilder/uefi/ISOLINUX/isohdpfx.bin
 
-NEED TO -- fix the 10 minute screen timeout in the created ISO.
+NEED TO -- fix the 10 minute screen timeout in the created ISO. (maybe fixed in non-enlightenment 'desktops')
 
-NEED TO -- figure out how to get a UEFI spin to install on a non-UEFI machine.  (low priority)
+Need to -- figure out how to get a UEFI spin to install on a non-UEFI machine.  (low priority)
+
+NEED TO -- add a check to see if the system has been dist-upgraded (bodhibuilder, bodhibuilder.conf, bodhibuilder-gtk.py, bodhibuilder-gtk.glade)
 
 NEED TO -- add a '-u' option to update the deb files that are in /etc/bodhibuilder/debs/{amd64,i386}/
             but first, before updating those debs, the current linux system needs to be up to date
@@ -17,4 +19,10 @@ NEED TO -- add a '-u' option to update the deb files that are in /etc/bodhibuild
                 sudo apt-get -V -u dist-upgrade --assume-no | tail -n+6 | head -n-5 | awk '{print$1}'    OR
                 sudo apt-get -V -u dist-upgrade --assume-no | tail -n+6 | head -n-5 | awk '{print$1}' | tr '\n' '\ '
             3. download the new deb files only if the system is fully dist-upgraded
-            
+
+NEED TO -- create a ubiquity slideshow for bodhibuilder (will be using bodhi-slideshow until then)
+
+NEED TO -- upgrade files /usr/share/bodhibuilder-gtk/{bodhibuilder-gtk.glade,bodhibuilder-gtk.py} to GTK 3+  (low priority)
+
+NEED TO -- figure out how to get a popup box instead of a popup terminal for bodhibuilder-gtk
+

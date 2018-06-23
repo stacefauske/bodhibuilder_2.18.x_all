@@ -8,8 +8,8 @@ if CODENAME="$(lsb_release -cs)"; then
   db_set mirror/codename "$CODENAME"
 fi
 
-rm -f /target/etc/apt/sources.list
-rm -f /target/etc/apt/sources.list.d/dvd.list
+##rm -f /target/etc/apt/sources.list
+##rm -f /target/etc/apt/sources.list.d/dvd.list
 PATH="/usr/lib/ubiquity/apt-setup:/usr/lib/ubiquity/choose-mirror:$PATH" \
   OVERRIDE_BASE_INSTALLABLE=1 OVERRIDE_LEAVE_CD_MOUNTED=1 \
   /usr/lib/ubiquity/apt-setup/apt-setup --log-output /target
@@ -25,6 +25,10 @@ if [ -e /target/boot/efi ] ; then
     echo "fs0:\EFI\ubuntu\grubia32.efi" >> /target/boot/efi/startup.nsh
   fi
 fi
+
+rm -f /target/etc/gdm3/custom.conf
+rm -f /target/etc/mdm/mdm.conf
+
 #~ #   ^ replaced ^ by ^ section ^ below ^
 
 #~ yes | rm -f /target/boot/efi/startup.nsh*

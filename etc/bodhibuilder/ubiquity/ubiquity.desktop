@@ -65,11 +65,15 @@ Comment[zh_CN]=将这个系统永久安装在您的硬盘上
 Comment[zh_TW]=將此系統安裝到您的硬碟中
 Keywords=ubiquity;
 #use sh because pkexec is broken under xfce/lxce http://pad.lv/1193526
-Exec=sudo ubiquity gtk_ui
+#Exec=sudo ubiquity gtk_ui
+Exec=pkexec ubiquity gtk_ui
+# Tested using this in 18.04 cuz this is the command used in Lubuntu - didn't fix permission errors
+#Exec=sudo --preserve-env=DBUS_SESSION_BUS_ADDRESS,XDG_RUNTIME_DIR sh -c 'ubiquity gtk_ui'
 Icon=/usr/share/icons/bbinstall.png
 Terminal=false
 Categories=GTK;System;Settings;
 NotShowIn=KDE;
 NoDisplay=false
+StartupNotify=true
 #X-Ubuntu-Gettext-Domain=ubiquity-desktop
 X-Ayatana-Appmenu-Show-Stubs=False

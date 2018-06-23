@@ -1,0 +1,16 @@
+#!/bin/bash
+#
+
+# Self-cannibalizing startup script for bodhibuilder
+#   Non X essential commands
+#   (For X essential commands, put them into iso_boot_script.sh,
+#    which is also self-cannibalizing)
+#
+
+sudo -i -u __LIVEUSER__ dbus-run-session -- gio set /home/__LIVEUSER__/Desktop/ubiquity.desktop metadata::trusted yes &
+
+sleep 7
+
+yes | rm -f /etc/rc.local
+
+exit 0
