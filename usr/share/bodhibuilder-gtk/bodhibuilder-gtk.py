@@ -63,7 +63,7 @@ except:
 
 APP = "bodhibuilder"
 DIR = "/usr/share/locale"
-APP_VERSION = "2.18.1"
+APP_VERSION = "2.18.2"
 
 locale.setlocale(locale.LC_ALL, '')
 gettext.bindtextdomain(APP, DIR)
@@ -683,7 +683,7 @@ WORKDIR="%(WORKDIR)s"
 
 
 # Here you can add any other files or directories to be excluded from the live filesystem
-#   Use absolute paths
+#   Use absolute paths (from the root directory)
 #   Exclude specific files using the path to the file = /path/to/file
 #   Exclude specific directories using a trailing slash = /path/to/directory/
 #   Exclude all directory contents with an asterisk = /path/to/directory/*
@@ -698,6 +698,7 @@ LIVEUSER="%(LIVEUSER)s"
 
 
 # Here you can change the name of the livecd/dvd label
+# This will be in the ubiquity icon label on the ISO
 LIVECDLABEL="%(LIVECDLABEL)s"
 
 
@@ -718,30 +719,37 @@ BACKUPSHOWINSTALL="%(BACKUPSHOWINSTALL)s"
 LIVECDURL="%(LIVECDURL)s"
 
 
-# Here you can specify icons or icon sets to include in a "dist" remaster only.
+# Here you can specify icons or icon sets to INCLUDE.
 #   List here the icons or sets you want to keep that are in this path:
 #     /usr/share/icons/(icon or icon set name)
-#   Do not list the whole path, just the set or icon name.
-#   If it's not a "dist" remaster, all icon sets will be included unless you specifically
-#   exclude their directories in the main EXCLUDES section above.
+#   Do not list the whole path, just the set or icon name in that path.
+#   ** If this var is empty, all icons will be included.
+#   WARNING: This option may cause problems with the installer on the live ISO.
+#            If so, try tweaking this option or leaving it blank.
 DISTICONS="%(DISTICONS)s"
 # Example:
-##~ DISTICONS="AwOken-Bodhi hicolor myfavoriteicon1.png myfavoriteicon2.png"
+#~ DISTICONS="AwOken-Bodhi hicolor myfavoriteicon1.png myfavoriteicon2.png"
 
 
-# Here you can specify locales to include in a "dist" remaster only
+# Here you can specify locales to INCLUDE.
 #   List here the locales you want to keep that are in this path:
 #     /usr/share/locale/(locale name)
-#   Do not list the whole path, just the directories of the locales you wish to include.
-#   If it's not a "dist" remaster, all locales will be included unless you specifically
-#   exclude their directories in the main EXCLUDES section above.
+#   Do not list the whole path, just the directories of the locales you wish to INCLUDE in that path.
+#   ** If this var is empty, all locales will be included.
 DISTLOCALE="%(DISTLOCALE)s"
 # Example:
-##~ DISTLOCALE="en en_AU en_CA en_GB de"
+#~ DISTLOCALE="en en_AU en_CA en_GB de"
 
 
 # Choose the distribution name you want to show up in GRUB
+# This will also be the DISTRIB_DESCRIPTION in /etc/lsb-release
 DISTNAME="%(DISTNAME)s"
+
+# Custom repositories
+# If you want any additional repositories add them to the file mentioned below
+# Don't change the following line, it is here for logging and informational purposes only
+CUSTOM_REPOS=`cat /etc/bodhibuilder/apt/custom_repos`
+##### ^^^ Do not change the above line ^^^ #####
 
 ''' % ({
         "WORKDIR" : self.window1.get_widget("entry6").get_text(),

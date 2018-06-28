@@ -14,6 +14,7 @@ PATH="/usr/lib/ubiquity/apt-setup:/usr/lib/ubiquity/choose-mirror:$PATH" \
   OVERRIDE_BASE_INSTALLABLE=1 OVERRIDE_LEAVE_CD_MOUNTED=1 \
   /usr/lib/ubiquity/apt-setup/apt-setup --log-output /target
 
+
 # UEFI support for VM's:
 if [ -e /target/boot/efi ] ; then
   rm -f /target/boot/efi/startup.nsh*
@@ -28,18 +29,6 @@ fi
 
 rm -f /target/etc/gdm3/custom.conf
 rm -f /target/etc/mdm/mdm.conf
-
-#~ #   ^ replaced ^ by ^ section ^ below ^
-
-#~ yes | rm -f /target/boot/efi/startup.nsh*
-#~ mkdir -p /target/boot/efi
-#~ touch /target/boot/efi/startup.nsh
-#~ ARCH=`archdetect | cut -d/ -f1`
-#~ if [ "${ARCH}" = "amd64" ] ; then
-  #~ echo "fs0:\EFI\ubuntu\grubx64.efi" >> /target/boot/efi/startup.nsh
-#~ else
-  #~ echo "fs0:\EFI\ubuntu\grubia32.efi" >> /target/boot/efi/startup.nsh
-#~ fi
 
 # Don't rm the following files for Backup mode. They're already handled
 # for dist mode in the main script.

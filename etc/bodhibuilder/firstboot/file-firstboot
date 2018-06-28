@@ -15,7 +15,7 @@ PATH=/sbin:/usr/sbin:/bin:/usr/bin:/usr/local/bin:/usr/local/sbin
 
 do_start() {
     #REM302
-    if [ "`cat /proc/cmdline | grep casper`" = "" ]; then
+    if [ "`cat /proc/cmdline | grep casper`" = "" ]; then # run thru this if it's not an ISO
         [ "$VERBOSE" != no ] && log_begin_msg "Running bodhibuilder-firstboot"
         # Removes this script from boot:
         (sleep 60 && update-rc.d -f bodhibuilder-firstboot remove) &
@@ -29,12 +29,24 @@ do_start() {
             sed -i -e 's/NoDisplay=false/NoDisplay=true/' /usr/share/applications/ubiquity.desktop
         # Create bodhibuilder desktop file for menus
         yes | cp -f /etc/bodhibuilder/applications/bodhibuilder-gtk.desktop /usr/share/applications/
-        # Add custom repositories to the installed OS
-        cat /etc/bodhibuilder/apt/custom_repos >> /etc/apt/sources.list && echo '' > /etc/bodhibuilder/apt/custom_repos
+
+        # Add custom repositories to the installed OS, if they're not already there
+        #~ cat /etc/bodhibuilder/apt/custom_repos >> /etc/apt/sources.list && echo '' > /etc/bodhibuilder/apt/custom_repos
+        custom_repos_content=`cat /etc/bodhibuilder/apt/custom_repos | grep -i --color=none [a-z]`
+        oldifs=$IFS # change the delimiter to 'newline' to use in the "for" loop
+        IFS=$'\n' # change the delimiter to 'newline' to use in the "for" loop
+        for insert in ${custom_repos_content} ; do
+          insert_exists=`grep ${insert} /etc/apt/sources.list`
+          [ ! "${insert_exists}" ] && echo ${insert} >>/etc/apt/sources.list
+        done
+        IFS=$oldifs # reset the delimiter back to its original default
+        # blank out custom_repos file for next spin, cuz desired repos should be in sources.list now
+        echo '' > /etc/bodhibuilder/apt/custom_repos
+
         # Replace OS grub with bodhibuilder's custom grub
         yes | cp -f /etc/default/grub.bodhi /etc/default/grub
         update-grub
-        
+
         ################################################
         ### CUSTOM COMMANDS
         #
@@ -46,9 +58,9 @@ do_start() {
         #       file to the existing /etc/apt/sources.list
         #       file. Thanks.
         #
-        # Commands entered into this file will be run only
-        # once - after the system has been installed and
-        # booted for the first time, and never again.
+        # Commands entered into this section will be run only when
+        # after the system has been installed and booted for the
+        # first time, and never again.
         #
         ### Place your custom commands below this line
         
@@ -58,6 +70,8 @@ do_start() {
         ES=$?
         [ "$VERBOSE" != no ] && log_end_msg $ES
         return $ES
+    else
+        logger Did not run thru bodhibuilder-firstboot code
     fi
 }
 

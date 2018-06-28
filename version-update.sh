@@ -7,14 +7,17 @@
 #   DEBIAN/control:Version: 2.1.0
 #   
 
-currversion=`cat ./etc/bodhibuilder/bodhibuilder.version | cut -d\" -f2`
+curr_version=`cat ./etc/bodhibuilder/bodhibuilder.version | cut -d\" -f2`
+curr_major_version=`echo ${curr_version} | cut -d. -f1-2`
+curr_minor_version=`echo ${curr_version} | cut -d. -f3`
+next_minor_version=$((curr_minor_version + 1))
 
 if [ ! "${1}" ] ; then # just echo out the version number
   echo ""
-  echo " Current bodhibuilder version is :  ${currversion}"
+  echo " Current bodhibuilder version is :  ${curr_version}"
   echo ""
-  echo " Example to change version :"
-  echo "   sudo ./version-update.sh 2.18.n"
+  echo " Example to change to the next minor version :"
+  echo "   sudo ./version-update.sh 2.18.${next_minor_version}"
   echo ""
 else # change version number throughout files
   echo ""
@@ -38,9 +41,9 @@ else # change version number throughout files
   sed -i "s/Version:.*$/Version: ${1}/" ./DEBIAN/control
   grep 'Version:.*$' ./DEBIAN/control
   
-  currversion=`cat ./etc/bodhibuilder/bodhibuilder.version | cut -d\" -f2`
+  curr_version=`cat ./etc/bodhibuilder/bodhibuilder.version | cut -d\" -f2`
   echo ""
-  echo " NEW bodhibuilder version is :  ${currversion}"
+  echo " NEW bodhibuilder version is :  ${curr_version}"
 fi
 
 exit 0
