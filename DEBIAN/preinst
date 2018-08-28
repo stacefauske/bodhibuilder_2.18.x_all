@@ -1,0 +1,19 @@
+#!/bin/bash
+#
+
+# remove leftover pool directory from before v2.18.2
+if [ -d /etc/bodhibuilder/uefi/pool/ ] ; then
+  yes | rm -rf /etc/bodhibuilder/uefi/pool/
+fi
+
+# remove deb files from previous install
+if [ -d /etc/bodhibuilder/uefi/dists/pool/ ] ; then
+  yes | rm -f /etc/bodhibuilder/uefi/dists/pool/*
+fi
+
+# remove a leftover original ubiquity.desktop file
+if [ -e /usr/share/applications/UBIQUITY.desktop_ORIG ] ; then
+  yes | rm -f /usr/share/applications/UBIQUITY.desktop_ORIG
+fi
+
+exit 0

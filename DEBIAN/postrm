@@ -1,0 +1,45 @@
+#!/bin/bash
+#
+
+# remove the bodhibuilder home dir from previous install
+if [ -d /home/bodhibuilder/ ] ; then
+  yes | rm -rf /home/bodhibuilder/
+fi
+
+# remove deb files from previous install
+if [ -d /etc/bodhibuilder/uefi/dists/pool/ ] ; then
+  yes | rm -f /etc/bodhibuilder/uefi/dists/pool/*
+fi
+
+# remove a leftover original ubiquity.desktop file
+if [ -e /usr/share/applications/UBIQUITY.desktop_ORIG ] ; then
+  yes | rm -f /usr/share/applications/UBIQUITY.desktop_ORIG
+fi
+
+# remove bodhibuilder's ubiquity.desktop file
+if [ -e /usr/share/applications/ubiquity.desktop_BB ] ; then
+  yes | rm -f /usr/share/applications/ubiquity.desktop_BB
+fi
+
+# remove firstboot file
+if [ -e /etc/init.d/bodhibuilder-firstboot ] ; then
+  yes | rm -f /etc/init.d/bodhibuilder-firstboot
+fi
+
+# remove leftover icons
+if [ -e /usr/share/pixmaps/bodhibuilder-gtk.png ] ; then
+  yes | rm -f /usr/share/pixmaps/bodhibuilder-gtk.png
+fi
+if [ -e /usr/share/icons/bodhibuilder-gtk.png ] ; then
+  yes | rm -f /usr/share/icons/bodhibuilder-gtk.png
+fi
+if [ -e /usr/share/icons/bbinstall.png ] ; then
+  yes | rm -f /usr/share/icons/bbinstall.png
+fi
+if [ -e /usr/share/icons/bbinstall_previous.png ] ; then
+  yes | rm -f /usr/share/icons/bbinstall_previous.png
+fi
+
+
+
+exit 0

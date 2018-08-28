@@ -27,24 +27,20 @@ do_start() {
             yes | rm -rf /usr/share/applications/UBIQUITY.desktop
             # Remove ubiquity from menus
             sed -i -e 's/NoDisplay=false/NoDisplay=true/' /usr/share/applications/ubiquity.desktop
+            sed -i -e 's/Hidden=false/Hidden=true/' /usr/share/applications/ubiquity.desktop
         # Create bodhibuilder desktop file for menus
         yes | cp -f /etc/bodhibuilder/applications/bodhibuilder-gtk.desktop /usr/share/applications/
 
-        # Add custom repositories to the installed OS, if they're not already there
-        #~ cat /etc/bodhibuilder/apt/custom_repos >> /etc/apt/sources.list && echo '' > /etc/bodhibuilder/apt/custom_repos
-        custom_repos_content=`cat /etc/bodhibuilder/apt/custom_repos | grep -i --color=none [a-z]`
-        oldifs=$IFS # change the delimiter to 'newline' to use in the "for" loop
-        IFS=$'\n' # change the delimiter to 'newline' to use in the "for" loop
-        for insert in ${custom_repos_content} ; do
-          insert_exists=`grep ${insert} /etc/apt/sources.list`
-          [ ! "${insert_exists}" ] && echo ${insert} >>/etc/apt/sources.list
-        done
-        IFS=$oldifs # reset the delimiter back to its original default
+        # Restore sources.list from source OS
+        yes | mv /etc/apt/sources.list /etc/apt/sources.list_ORIG
+        yes | mv /etc/bodhibuilder/apt/sources.list_BB /etc/apt/sources.list
+
         # blank out custom_repos file for next spin, cuz desired repos should be in sources.list now
         echo '' > /etc/bodhibuilder/apt/custom_repos
 
         # Replace OS grub with bodhibuilder's custom grub
         yes | cp -f /etc/default/grub.bodhi /etc/default/grub
+        sed -i "s/^DISTRIB_DESCRIPTION=.*$/DISTRIB_DESCRIPTION=\"__DISTNAME__\"/" /etc/lsb-release
         update-grub
 
         ################################################

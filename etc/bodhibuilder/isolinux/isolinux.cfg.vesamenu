@@ -8,12 +8,12 @@ menu color title 1;37;44 #c0ffffff #00000000 std
 
 label live
   menu label live - Legacy/BIOS boot the Live System
-  kernel /casper/vmlinuz.efi
+  kernel /casper/vmlinuz
   append  file=/cdrom/preseed/custom.seed boot=casper initrd=/casper/initrd.lz quiet splash --
 
 label xforcevesa
   menu label xforcevesa - Legacy/BIOS boot Live in safe graphics mode
-  kernel /casper/vmlinuz.efi
+  kernel /casper/vmlinuz
   append  file=/cdrom/preseed/custom.seed boot=casper nomodeset xforcevesa initrd=/casper/initrd.lz quiet splash --
 
 label memtest
@@ -23,7 +23,7 @@ label memtest
   
 label check
   menu label check - check distro integrity
-  kernel /casper/vmlinuz.efi
+  kernel /casper/vmlinuz
   append  boot=casper integrity-check initrd=/casper/initrd.lz quiet splash --
 
 label hd

@@ -171,29 +171,6 @@ echo "" >>${WORKDIR}/bodhibuilder.log
 echo " Files & Dirs in location /etc/bodhibuilder:" >>${WORKDIR}/bodhibuilder.log
 ls -l /etc/bodhibuilder/ >>${WORKDIR}/bodhibuilder.log
 
-## custom_repos will also be re-checked in file-firstboot & apt-setup.bb as insurance
-# gather info about custom repositories
-#~ # Double check the custom repos in case CUSTOM_REPOS in the conf file gets mangled
-CUSTOM_REPOS=`cat /etc/bodhibuilder/apt/custom_repos`
-if [ "${CUSTOM_REPOS}" ] ; then
-  echo "CUSTOM_REPOS in /etc/bodhibuilder/apt/custom_repos =" >>${WORKDIR}/bodhibuilder.log
-  echo ${CUSTOM_REPOS} >>${WORKDIR}/bodhibuilder.log
-  #
-  custom_repos_content=`cat /etc/bodhibuilder/apt/custom_repos | grep -i --color=none [a-z]`
-  # change the delimiter to 'newline' to use in the "for" loop
-  oldifs=$IFS
-  IFS=$'\n'
-  for insert in ${custom_repos_content} ; do
-    insert_exists=`grep ${insert} ${WORKDIR}/dummysys/etc/apt/sources.list`
-    [ ! "${insert_exists}" ] && echo ${insert} >>${WORKDIR}/dummysys/etc/apt/sources.list
-  done
-  # reset the delimiter back to its original default
-  IFS=$oldifs
-  ##~ echo ${CUSTOM_REPOS} >>${WORKDIR}/dummysys/etc/apt/sources.list
-else
-  echo "No custom repo's in /etc/bodhibuilder/apt/custom_repos" >>${WORKDIR}/bodhibuilder.log
-fi
-
 if [ ! "${LIVEUSER}" ] ; then
     #Somebody must have removed the username from the configuration file
     echo "no LIVEUSER found, using default" >>${WORKDIR}/bodhibuilder.log
@@ -390,625 +367,667 @@ fi
 ##### FUNCTION cdfs #####
 cdfs (){
 
-log_msg "Removing unnecessary packages, and cleaning up the system."
-    rm -rf /opt/teamviewer/config/global.conf
-    apt-get clean
+  log_msg "Removing unnecessary packages, and cleaning up the system."
+      rm -rf /opt/teamviewer/config/global.conf
+      apt-get clean
+  
+  log_msg "Enabling bodhibuilder-firstboot"
+  cp -f /etc/bodhibuilder/firstboot/file-firstboot /etc/init.d/bodhibuilder-firstboot
+  sed -i 's/__DISTNAME__/'"${DISTNAME}"'/g' /etc/init.d/bodhibuilder-firstboot
+  chmod 755 /etc/init.d/bodhibuilder-firstboot
+  update-rc.d bodhibuilder-firstboot defaults
+  
+  log_msg "Checking filesystem type of the Working Folder"
+  DIRTYPE=`df -T -P ${WORKDIR} | grep "^\/dev" | awk '{print $2}'`
+  log_msg "${WORKDIR} is on a ${DIRTYPE} filesystem"
 
-log_msg "Enabling bodhibuilder-firstboot"
-cp -f /etc/bodhibuilder/firstboot/file-firstboot /etc/init.d/bodhibuilder-firstboot
-chmod 755 /etc/init.d/bodhibuilder-firstboot
-update-rc.d bodhibuilder-firstboot defaults
-
-log_msg "Checking filesystem type of the Working Folder"
-DIRTYPE=`df -T -P ${WORKDIR} | grep "^\/dev" | awk '{print $2}'`
-log_msg "${WORKDIR} is on a ${DIRTYPE} filesystem"
-
-    #Changing caspers user-uid
-    sed -i -e 's@user-uid [0-9]*@user-uid 990@' /usr/share/initramfs-tools/scripts/casper-bottom/*adduser
-
-    #removing popularity-contest as it causes a problem when installing with ubiquity
-    log_msg "Making sure popularity contest is not installed"
-    apt-get -y -q remove popularity-contest &> /dev/null
-
-    # check whether system is kde based or other to load the correct ubiquity frontend
-    if [ "`ps axf | grep startkde | grep -v grep`" != "" -o "`ps axf | grep kwin | grep -v grep`" != "" ] ; then
-        log_msg "Installing the Ubiquity KDE frontend"
-        apt-get -y -q remove ubiquity-frontend-kde &> /dev/null
-        apt-get -y -q install ubiquity-frontend-kde &> /dev/null
-        apt-get -y -q remove ubiquity-frontend-gtk &> /dev/null
-        chmod +x /usr/share/applications/kde4/ubiquity-kdeui.desktop &> /dev/null
-        sed -i "s/ubiquity kde_ui/pkexec ubiquity kde_ui/" /usr/share/applications/kde4/ubiquity-kdeui.desktop
-    else
-        log_msg "Installing the Ubiquity GTK frontend"
-        apt-get -y -q remove ubiquity-frontend-gtk &> /dev/null
-        apt-get -y -q install ubiquity-frontend-gtk &> /dev/null
-        apt-get -y -q remove ubiquity-frontend-kde &> /dev/null
-        chmod +x /usr/share/applications/ubiquity.desktop &> /dev/null
-        sed -i "s/sh -c 'ubiquity gtk_ui'/pkexec ubiquity gtk_ui/" /usr/share/applications/ubiquity.desktop
-    fi
-
-
-### Don't check for lightdm anymore, just let whatever DM do it's thing
-#     Keep this code here in case it needs to be implemented again
-#~ #lightdm check - changed for 16.04
-    #~ # Check if they are using lightdm and if it is setup properly for the live default session
-    #~ #   Need to change this section a little
-    #~ #   lightdm has changed a bit in 16.04, and the running of 'accountsservice' also means that 'lightdm.conf' file will not be read
-    #~ #    but rather a file in /etc/lightdm/lightdm.conf.d/ such as 50-ubuntu.conf
-    #~ if [ "`grep lightdm /etc/X11/default-display-manager`" == "" ] ; then
-      #~ log_msg "Lightdm not setup properly. You must set your default desktop with lightdm prior to remastering" 
-      #~ exit 1
-    #~ fi
-    #~ 
-    #~ # this test may be irrelevant in 16.04
-    #~ if [ ! -f /etc/lightdm/lightdm.conf ] ; then
-      #~ log_msg "Lightdm not setup properly for a default session. Missing file /etc/lightdm/lightdm.conf. You must set your default desktop with lightdm prior to remastering"
-      #~ exit 1
-    #~ fi
-    #~ # maybe create a default 51-bb.conf file to put into /etc/lightdm/lightdm.conf.d/ and then change it to this:
-    #~ ##~ if [ ! -f /etc/lightdm/lightdm.conf.d/51-bb.conf ] ; then
-      #~ ##~ log_msg "Lightdm not setup properly for a default session. Missing bb file in /etc/lightdm/lightdm.conf.d/. You must set your default desktop with lightdm prior to remastering"
-      #~ ##~ exit 1
-    #~ ##~ fi
-    #~ 
-    #~ if [ ! -f /usr/share/xsessions/*.desktop ] ; then
-      #~ log_msg "Lightdm not setup properly. Missing a (session).desktop file in /usr/share/xsessions/. Exiting."
-      #~ exit 1
-    #~ fi
-    #~ log_msg "Lightdm detected"
-
-
-    # Check and log the display manager in use:
-    currentdm_path="`cat /etc/X11/default-display-manager`"
-    currentdm=`basename ${currentdm_path}`
-    echo "Current Display Manager is ${currentdm}  @  ${currentdm_path}"
-
-    #Disabling swapfile ?
-    #~ swapoff -v /swapfile &> /dev/null
-
-log_msg "Renaming Distro to ${LIVECDLABEL}"
-    sed -i 's/PRETTY_NAME=.*/PRETTY_NAME="LIVECDLABEL"/g' /usr/lib/os-release
-    sed -i "s/LIVECDLABEL/${LIVECDLABEL}/g" /usr/lib/os-release
-
-    sleep 1
-
-    # Step 3 - Create the CD tree in ${WORKDIR}/ISOTMP
-    log_msg "Checking if the ${WORKDIR} folder has been created"
-    if [ -d "${WORKDIR}/dummysys" ] ; then
-        rm -rf ${WORKDIR}/dummysys/var/*
-        rm -rf ${WORKDIR}/dummysys/etc/*
-        rm -rf ${WORKDIR}/dummysys/run/*
-        rm -rf ${WORKDIR}/ISOTMP/{isolinux,grub,.disk}
-    else
-        log_msg "Creating ${WORKDIR} folder tree"
-        mkdir -p ${WORKDIR}/ISOTMP/{casper,preseed}
-        mkdir -p ${WORKDIR}/dummysys/{dev,etc,proc,tmp,sys,mnt,media/cdrom,var}
-        rsync -a /dev/urandom ${WORKDIR}/dummysys/dev/
-        if [ -d /run ] ; then
-            mkdir -p ${WORKDIR}/dummysys/run
-        fi
-        chmod ug+rwx,o+rwt ${WORKDIR}/dummysys/tmp
-    fi
-
-    log_msg "Creating ${WORKDIR}/ISOTMP folder tree"
-    mkdir -vp ${WORKDIR}/ISOTMP/{isolinux,install,.disk}
-
-    log_msg "Copying /var and /etc to temp area and excluding extra files  ...  depending on your system, this may take a while so please be patient"
+  #Changing caspers user-uid
+  sed -i -e 's@user-uid [0-9]*@user-uid 990@' /usr/share/initramfs-tools/scripts/casper-bottom/*adduser
+  
+  #removing popularity-contest as it causes a problem when installing with ubiquity
+  log_msg "Making sure popularity contest is not installed"
+  apt-get -y -q remove popularity-contest &> /dev/null
+  
+  # check whether system is kde based or other to load the correct ubiquity frontend
+  #   NOTE: May need to change this check to look for one of these env vars instead:
+  #         $XDG_CURRENT_DESKTOP  -or-  $DESKTOP_SESSION
+  #   NOTE: For now, just to avoid problems, just install the gtk frontend (kde code commented out)
+  #
+  #~ if [ "`ps axf | grep startkde | grep -v grep`" != "" -o "`ps axf | grep kwin | grep -v grep`" != "" ] ; then
+  #~ if [ "`ps axf | grep -o -m1 startkde`" != "" -o "`ps axf | grep -o -m1 kwin`" != "" ] ; then
+  #~ if [ "`echo $XDG_CURRENT_DESKTOP`" == "KDE" ] ; then
+      #~ log_msg "Installing the Ubiquity KDE frontend"
+      #~ apt-get -y -q remove ubiquity-frontend-kde &> /dev/null
+      #~ apt-get -y -q install ubiquity-frontend-kde &> /dev/null
+      #~ apt-get -y -q remove ubiquity-frontend-gtk &> /dev/null
+      #~ chmod +x /usr/share/applications/kde4/ubiquity-kdeui.desktop &> /dev/null
+      #~ sed -i "s/ubiquity kde_ui/pkexec ubiquity kde_ui/" /usr/share/applications/kde4/ubiquity-kdeui.desktop
+  #~ else
+      log_msg "Installing the Ubiquity GTK frontend"
+      ubiquity_frontend_gtk_status=`dpkg --get-selections | grep ubiquity-frontend-gtk`
+      if [ "${ubiquity_frontend_gtk_status}" ] ; then
+        #~ apt-get -y -q remove ubiquity-frontend-gtk &> /dev/null
+        apt-get -y -q remove ubiquity-frontend-gtk &>> ${WORKDIR}/bodhibuilder.log
+        sleep 1
+      else
+        echo "ubiquity-frontend-gtk not initially installed" >> ${WORKDIR}/bodhibuilder.log
+      fi
+      # install ubiquity-frontend-gtk regardless
+      #~ apt-get -y -q install ubiquity-frontend-gtk &> /dev/null
+      apt-get -y -q install ubiquity-frontend-gtk &>> ${WORKDIR}/bodhibuilder.log
+      sleep 1
+      ubiquity_frontend_kde_status=`dpkg --get-selections | grep ubiquity-frontend-kde`
+      if [ "${ubiquity_frontend_kde_status}" ] ; then
+        #~ apt-get -y -q remove ubiquity-frontend-kde &> /dev/null
+        apt-get -y -q remove ubiquity-frontend-kde &>> ${WORKDIR}/bodhibuilder.log
+        sleep 1
+      else
+        echo "ubiquity-frontend-kde not initially installed" >> ${WORKDIR}/bodhibuilder.log
+      fi
+      # double-check for ubiquity-frontend-gtk installation
+      # cuz if it's not installed ubiquity won't work
+      ubiquity_frontend_gtk_status=`dpkg --get-selections | grep ubiquity-frontend-gtk`
+      if [ ! "${ubiquity_frontend_gtk_status}" ] ; then
+        #~ apt-get -y -q install ubiquity-frontend-gtk &> /dev/null
+        apt-get -y -q install ubiquity-frontend-gtk &>> ${WORKDIR}/bodhibuilder.log
+        sleep 1
+      else
+        echo "ubiquity-frontend-gtk installed -- re-check" >> ${WORKDIR}/bodhibuilder.log
+      fi
+      ## Removing the changing of ubiquity.desktop in /usr/share/applications/
+      #~ chmod +x /usr/share/applications/ubiquity.desktop &> /dev/null
+      #~ chmod +x /usr/share/applications/ubiquity.desktop &>> ${WORKDIR}/bodhibuilder.log
+      #~ sed -i "s/sh -c 'ubiquity gtk_ui'/sudo ubiquity gtk_ui/" /usr/share/applications/ubiquity.desktop
+  #~ fi
 
 
-    ## new exclusions code
-    # All exclusions from config file
-    ALLEXCLUDES=
-    # Only the exclusions in the /var/ directory
+  ### Don't check for lightdm anymore, just let whatever DM do it's thing
+  #     Keep this code here in case it needs to be implemented again
+  #
+  #~ #lightdm check - changed for 16.04
+  #~ # Check if they are using lightdm and if it is setup properly for the live default session
+  #~ #   Need to change this section a little
+  #~ #   lightdm has changed a bit in 16.04, and the running of 'accountsservice' also means that 'lightdm.conf' file will not be read
+  #~ #    but rather a file in /etc/lightdm/lightdm.conf.d/ such as 50-ubuntu.conf
+  #~ if [ "`grep lightdm /etc/X11/default-display-manager`" == "" ] ; then
+    #~ log_msg "Lightdm not setup properly. You must set your default desktop with lightdm prior to remastering" 
+    #~ exit 1
+  #~ fi
+  #~ 
+  #~ # this test may be irrelevant in 16.04
+  #~ if [ ! -f /etc/lightdm/lightdm.conf ] ; then
+    #~ log_msg "Lightdm not setup properly for a default session. Missing file /etc/lightdm/lightdm.conf. You must set your default desktop with lightdm prior to remastering"
+    #~ exit 1
+  #~ fi
+  #~ # maybe create a default 51-bb.conf file to put into /etc/lightdm/lightdm.conf.d/ and then change it to this:
+  #~ ##~ if [ ! -f /etc/lightdm/lightdm.conf.d/51-bb.conf ] ; then
+    #~ ##~ log_msg "Lightdm not setup properly for a default session. Missing bb file in /etc/lightdm/lightdm.conf.d/. You must set your default desktop with lightdm prior to remastering"
+    #~ ##~ exit 1
+  #~ ##~ fi
+  #~ 
+  #~ if [ ! -f /usr/share/xsessions/*.desktop ] ; then
+    #~ log_msg "Lightdm not setup properly. Missing a (session).desktop file in /usr/share/xsessions/. Exiting."
+    #~ exit 1
+  #~ fi
+  #~ log_msg "Lightdm detected"
+
+
+  # Check and log the display manager in use:
+  currentdm_path="`cat /etc/X11/default-display-manager`"
+  currentdm=`basename ${currentdm_path}`
+  echo "Current Display Manager is ${currentdm}  @  ${currentdm_path}"
+
+  #Disabling swapfile ?
+  #~ swapoff -v /swapfile &> /dev/null
+
+  log_msg "Renaming Distro to ${LIVECDLABEL}"
+  sed -i 's/PRETTY_NAME=.*/PRETTY_NAME="LIVECDLABEL"/g' /usr/lib/os-release
+  sed -i "s/LIVECDLABEL/${LIVECDLABEL}/g" /usr/lib/os-release
+
+  sleep 1
+
+  # Step 3 - Creation of the CD tree in ${WORKDIR}/{ISOTMP,dummysys}
+  log_msg "Checking if the ${WORKDIR} folder has been created"
+  if [ -d "${WORKDIR}/dummysys" ] ; then
+      rm -rf ${WORKDIR}/dummysys/var/*
+      rm -rf ${WORKDIR}/dummysys/etc/*
+      rm -rf ${WORKDIR}/dummysys/run/*
+      rm -rf ${WORKDIR}/ISOTMP/{isolinux,grub,.disk}
+  else
+      log_msg "Creating ${WORKDIR} folder tree"
+      mkdir -vp ${WORKDIR}/ISOTMP/{casper,preseed}
+      mkdir -vp ${WORKDIR}/dummysys/{dev,etc,proc,tmp,sys,mnt,media/cdrom,var}
+      rsync -a /dev/urandom ${WORKDIR}/dummysys/dev/
+      if [ -d /run ] ; then
+          mkdir -vp ${WORKDIR}/dummysys/run
+      fi
+      chmod ug+rwx,o+rwt ${WORKDIR}/dummysys/tmp
+  fi
+
+  log_msg "Creating ${WORKDIR}/ISOTMP folder tree"
+  mkdir -vp ${WORKDIR}/ISOTMP/{isolinux,install,.disk}
+
+  log_msg "Copying /var and /etc to temp area and excluding extra files  ...  depending on your system, this may take a while so please be patient"
+
+
+  ## new exclusions code
+  # All exclusions from config file
+  ALLEXCLUDES=
+  # Only the exclusions in the /var/ directory
+  VAREXCLUDES=
+  # Only the exclusions in the /etc/ directory
+  ETCEXCLUDES=
+  if [ "${EXCLUDES}" ] ; then
+    echo "EXCLUDES variable is not empty" >> ${WORKDIR}/bodhibuilder.log
+    for add in ${EXCLUDES} ; do # all exclusions
+      ALLEXCLUDES="${ALLEXCLUDES} --exclude='${add}' "
+    done
+    # echo some stuff to the log
+    echo "" >> ${WORKDIR}/bodhibuilder.log
+    echo "   ALLEXCLUDES IS:" >> ${WORKDIR}/bodhibuilder.log
+    echo "${ALLEXCLUDES}" >> ${WORKDIR}/bodhibuilder.log
+
+    # exclusions for /var/
     VAREXCLUDES=
-    # Only the exclusions in the /etc/ directory
+    for addvar in ${EXCLUDES} ; do # exclusions in the var dir
+      addvaryes=`echo ${addvar} | grep '/var/'`
+      if [ "${addvaryes}" ] ; then
+        VAREXCLUDES="${VAREXCLUDES} --exclude='${addvaryes}' "
+      fi
+    done
+    echo "" >> ${WORKDIR}/bodhibuilder.log
+    echo "   Unedited VAREXCLUDES IS:" >> ${WORKDIR}/bodhibuilder.log
+    echo "${VAREXCLUDES}" >> ${WORKDIR}/bodhibuilder.log
+    VAREXCLUDES=`echo ${VAREXCLUDES} | sed 's/\/var\//\//g'` # Cleanup path for var exclusions for rsync
+    echo "" >> ${WORKDIR}/bodhibuilder.log
+    echo "   Edited VAREXCLUDES IS:" >> ${WORKDIR}/bodhibuilder.log
+    echo "${VAREXCLUDES}" >> ${WORKDIR}/bodhibuilder.log
+
+    # exclusions for /etc/
     ETCEXCLUDES=
-    if [ "${EXCLUDES}" ] ; then
-      echo "EXCLUDES variable is not empty" >> ${WORKDIR}/bodhibuilder.log
-      for add in ${EXCLUDES} ; do # all exclusions
-        ALLEXCLUDES="${ALLEXCLUDES} --exclude='${add}' "
-      done
-      # echo some stuff to the log
-      echo "" >> ${WORKDIR}/bodhibuilder.log
-      echo "   ALLEXCLUDES IS:" >> ${WORKDIR}/bodhibuilder.log
-      echo "${ALLEXCLUDES}" >> ${WORKDIR}/bodhibuilder.log
+    for addetc in ${EXCLUDES} ; do # exclusions in the etc dir
+      addetcyes=`echo ${addetc} | grep '/etc/'`
+      if [ "${addetcyes}" ] ; then
+        ETCEXCLUDES="${ETCEXCLUDES} --exclude='${addetcyes}' "
+      fi
+    done
+    echo "" >> ${WORKDIR}/bodhibuilder.log
+    echo "   Unedited ETCEXCLUDES IS:" >> ${WORKDIR}/bodhibuilder.log
+    echo "${ETCEXCLUDES}" >> ${WORKDIR}/bodhibuilder.log
+    ETCEXCLUDES=`echo ${ETCEXCLUDES} | sed 's/\/etc\//\//g'` # Cleanup path for etc exclusions for rsync
+    echo "" >> ${WORKDIR}/bodhibuilder.log
+    echo "   Edited ETCEXCLUDES IS:" >> ${WORKDIR}/bodhibuilder.log
+    echo "${ETCEXCLUDES}" >> ${WORKDIR}/bodhibuilder.log
+  fi
 
-      # exclusions for /var/
-      VAREXCLUDES=
-      for addvar in ${EXCLUDES} ; do # exclusions in the var dir
-        addvaryes=`echo ${addvar} | grep '/var/'`
-        if [ "${addvaryes}" ] ; then
-          VAREXCLUDES="${VAREXCLUDES} --exclude='${addvaryes}' "
-        fi
-      done
-      echo "" >> ${WORKDIR}/bodhibuilder.log
-      echo "   Unedited VAREXCLUDES IS:" >> ${WORKDIR}/bodhibuilder.log
-      echo "${VAREXCLUDES}" >> ${WORKDIR}/bodhibuilder.log
-      VAREXCLUDES=`echo ${VAREXCLUDES} | sed 's/\/var\//\//g'` # Cleanup path for var exclusions for rsync
-      echo "" >> ${WORKDIR}/bodhibuilder.log
-      echo "   Edited VAREXCLUDES IS:" >> ${WORKDIR}/bodhibuilder.log
-      echo "${VAREXCLUDES}" >> ${WORKDIR}/bodhibuilder.log
+  ## rsync /etc/ & /var/ dirs
+  var_sync="rsync -a --exclude='*.log.[0-9]*' --exclude='*.log.old' --exclude='syslog.[0-9]*' --exclude='[bw]tmp.[0-9]*' --exclude='*.pid' --exclude='*.bak' --exclude='*.[0-9].gz' --exclude='*.deb' --exclude='kdecache*' --exclude='*~' ${VAREXCLUDES} /var/. ${WORKDIR}/dummysys/var/."
+  echo "   syncing /var/ directory using:" >> ${WORKDIR}/bodhibuilder.log
+  echo "> ${var_sync}" >> ${WORKDIR}/bodhibuilder.log
+  eval ${var_sync}
 
-      # exclusions for /etc/
-      ETCEXCLUDES=
-      for addetc in ${EXCLUDES} ; do # exclusions in the etc dir
-        addetcyes=`echo ${addetc} | grep '/etc/'`
-        if [ "${addetcyes}" ] ; then
-          ETCEXCLUDES="${ETCEXCLUDES} --exclude='${addetcyes}' "
-        fi
-      done
-      echo "" >> ${WORKDIR}/bodhibuilder.log
-      echo "   Unedited ETCEXCLUDES IS:" >> ${WORKDIR}/bodhibuilder.log
-      echo "${ETCEXCLUDES}" >> ${WORKDIR}/bodhibuilder.log
-      ETCEXCLUDES=`echo ${ETCEXCLUDES} | sed 's/\/etc\//\//g'` # Cleanup path for etc exclusions for rsync
-      echo "" >> ${WORKDIR}/bodhibuilder.log
-      echo "   Edited ETCEXCLUDES IS:" >> ${WORKDIR}/bodhibuilder.log
-      echo "${ETCEXCLUDES}" >> ${WORKDIR}/bodhibuilder.log
+  etc_sync="rsync -a ${ETCEXCLUDES} /etc/. ${WORKDIR}/dummysys/etc/."
+  echo "   syncing /etc/ directory using:" >> ${WORKDIR}/bodhibuilder.log
+  echo "> ${etc_sync}" >> ${WORKDIR}/bodhibuilder.log
+  eval ${etc_sync}
+  echo "done syncing" >> ${WORKDIR}/bodhibuilder.log
+
+  ### syncing done ###
+
+
+
+  # gather info about custom repositories
+  #~ # Double check the custom repos in case CUSTOM_REPOS in the conf file gets mangled
+  CUSTOM_REPOS=`cat /etc/bodhibuilder/apt/custom_repos`
+  if [ "${CUSTOM_REPOS}" ] ; then
+    echo "CUSTOM_REPOS in /etc/bodhibuilder/apt/custom_repos =" >>${WORKDIR}/bodhibuilder.log
+    echo "${CUSTOM_REPOS}" >>${WORKDIR}/bodhibuilder.log
+    echo "" >>${WORKDIR}/bodhibuilder.log #T/S
+    #
+    # change the delimiter to 'newline' to use in the "for" loop
+    oldifs=$IFS
+    IFS=$'\n'
+    custom_repos_content=`cat /etc/bodhibuilder/apt/custom_repos | grep -i --color=none [a-z]`
+    echo "  custom_repos_content is" >>${WORKDIR}/bodhibuilder.log #T/S log
+    echo "${custom_repos_content}" >>${WORKDIR}/bodhibuilder.log #T/S log
+    echo "" >>${WORKDIR}/bodhibuilder.log #T/S log
+    z=1
+    for insert in ${custom_repos_content} ; do
+      echo -n "  ${z} insert is -->         " >>${WORKDIR}/bodhibuilder.log #T/S log
+      echo "${insert}" >>${WORKDIR}/bodhibuilder.log #T/S log
+      insert_grep=`echo "${insert}" | sed 's,\[,\\\[,g' | sed 's,\],\\\],g'`
+      echo -n "  ${z} insert_grep is -->    " >>${WORKDIR}/bodhibuilder.log #T/S log
+      echo "${insert_grep}" >>${WORKDIR}/bodhibuilder.log #T/S log
+      insert_exists=`grep "${insert_grep}" ${WORKDIR}/dummysys/etc/apt/sources.list`
+      echo -n "  ${z} insert_exists is -->  " >>${WORKDIR}/bodhibuilder.log #T/S log
+      echo "${insert_exists}" >>${WORKDIR}/bodhibuilder.log #T/S log
+      if [ ! "${insert_exists}" ] ; then
+        echo ${insert} >>${WORKDIR}/dummysys/etc/apt/sources.list
+      else
+        echo -e "  ${z} ${insert_exists}\n    not put into\n    ${WORKDIR}/dummysys/etc/apt/sources.list" >>${WORKDIR}/bodhibuilder.log #T/S log
+      fi
+      echo "" >>${WORKDIR}/bodhibuilder.log #T/S log
+      z=$((z+1))
+    done
+    # reset the delimiter back to its original default
+    IFS=$oldifs
+    ##~ echo ${CUSTOM_REPOS} >>${WORKDIR}/dummysys/etc/apt/sources.list
+  else
+    echo "No custom repo's in /etc/bodhibuilder/apt/custom_repos" >>${WORKDIR}/bodhibuilder.log
+  fi
+
+  # backup sources.list now that custom_repos have been added
+  yes | cp -p ${WORKDIR}/dummysys/etc/apt/sources.list ${WORKDIR}/dummysys/etc/bodhibuilder/apt/sources.list_BB
+  #Adding packages location to sources
+  # note: custom_repos have already been added above
+  DISKINFONAME=`echo $LIVECDLABEL | awk '{print $1}'`
+  log_msg "Adding CD-ROM to source list"
+  . /etc/lsb-release
+  sed -i '/cdrom:/d' ${WORKDIR}/dummysys/etc/apt/sources.list &> /dev/null
+  #~ if [ "${ARCH}" == "amd64" ] ; then
+    echo "deb [trusted=yes] file:/cdrom/dists/ ./  # ISO repo - BB" >> ${WORKDIR}/dummysys/etc/apt/sources.list
+  #~ else
+    #~ ##~ echo "deb cdrom:[${DISKINFONAME} ${DISTRIB_RELEASE} - Release ${ARCH}]/ dists/" >> ${WORKDIR}/dummysys/etc/apt/sources.list
+    #~ echo "deb cdrom:[${DISKINFONAME} ${DISTRIB_RELEASE} - Release ${ARCH}]/dists/ ./ # ISO repo - BB" >> ${WORKDIR}/dummysys/etc/apt/sources.list
+  #~ fi
+  echo "-- File Content of  ${WORKDIR}/dummysys/etc/apt/sources.list --" >> ${WORKDIR}/bodhibuilder.log
+  cat ${WORKDIR}/dummysys/etc/apt/sources.list >> ${WORKDIR}/bodhibuilder.log
+  echo "" >> ${WORKDIR}/bodhibuilder.log
+  echo "-- File Content of  /etc/apt/sources.list --" >> ${WORKDIR}/bodhibuilder.log
+  cat /etc/apt/sources.list >> ${WORKDIR}/bodhibuilder.log
+  echo "---------------------------" >> ${WORKDIR}/bodhibuilder.log
+
+
+  ## Custom grub config
+  if [ -e /etc/bodhibuilder/grub/grub.bodhi ] ; then
+    log_msg "Found custom grub for ${DISTNAME}"
+    cp -f /etc/bodhibuilder/grub/grub.bodhi ${WORKDIR}/dummysys/etc/default/
+    chmod 644 ${WORKDIR}/dummysys/etc/default/grub.bodhi
+    cp -f /etc/bodhibuilder/grub/grub.bodhi ${WORKDIR}/dummysys/etc/default/grub
+    if [ -d /etc/bodhibuilder/grub/backgrounds ] ; then
+      cp -rf /etc/bodhibuilder/grub/backgrounds/ ${WORKDIR}/dummysys/etc/grub.d/
     fi
+  fi
 
-    ## rsync /etc/ & /var/ dirs
-    var_sync="rsync -a --exclude='*.log.[0-9]*' --exclude='*.log.old' --exclude='syslog.[0-9]*' --exclude='[bw]tmp.[0-9]*' --exclude='*.pid' --exclude='*.bak' --exclude='*.[0-9].gz' --exclude='*.deb' --exclude='kdecache*' --exclude='*~' ${VAREXCLUDES} /var/. ${WORKDIR}/dummysys/var/."
-    echo "   syncing /var/ directory using:" >> ${WORKDIR}/bodhibuilder.log
-    echo "> ${var_sync}" >> ${WORKDIR}/bodhibuilder.log
-    eval ${var_sync}
-
-    etc_sync="rsync -a ${ETCEXCLUDES} /etc/. ${WORKDIR}/dummysys/etc/."
-    echo "   syncing /etc/ directory using:" >> ${WORKDIR}/bodhibuilder.log
-    echo "> ${etc_sync}" >> ${WORKDIR}/bodhibuilder.log
-    eval ${etc_sync}
-    echo "done syncing" >> ${WORKDIR}/bodhibuilder.log
-
-
-    #Adding packages location to sources
-    DISKINFONAME=`echo $LIVECDLABEL | awk '{print $1}'`
-    log_msg "Adding CD-ROM to source list"
-    . /etc/lsb-release
-    sed -i '/cdrom:/d' ${WORKDIR}/dummysys/etc/apt/sources.list &> /dev/null
-    if [ "${ARCH}" == "amd64" ] ; then
-      echo "deb [trusted=yes] file:/cdrom/dists/ ./  # ISO repo - BB" >> ${WORKDIR}/dummysys/etc/apt/sources.list
+  # Put a custom name into grub - need to use DISTRIB_DESCRIPTION rather than DISTRIB_ID
+  if [ "${DISTNAME}" ] ; then
+    if [ -e "${WORKDIR}/dummysys/etc/lsb-release" ] ; then
+      sed -i "s/^DISTRIB_DESCRIPTION=.*$/DISTRIB_DESCRIPTION=\"Ubuntu\"/" ${WORKDIR}/dummysys/etc/lsb-release
+      sed -i 's/^GRUB_DISTRIBUTOR=.*$/GRUB_DISTRIBUTOR=\`lsb_release -d -s 2> \/dev\/null || echo Debian\`/' ${WORKDIR}/dummysys/etc/default/grub.bodhi
+      sed -i 's/^GRUB_DISTRIBUTOR=.*$/GRUB_DISTRIBUTOR=\`lsb_release -d -s 2> \/dev\/null || echo Debian\`/' ${WORKDIR}/dummysys/etc/default/grub
     else
-      #~ echo "deb cdrom:[${DISKINFONAME} ${DISTRIB_RELEASE} - Release ${ARCH}]/ dists/" >> ${WORKDIR}/dummysys/etc/apt/sources.list
-      echo "deb cdrom:[${DISKINFONAME} ${DISTRIB_RELEASE} - Release ${ARCH}]/dists/ ./ # ISO repo - BB" >> ${WORKDIR}/dummysys/etc/apt/sources.list
+      sed -i 's/^GRUB_DISTRIBUTOR=.*$/GRUB_DISTRIBUTOR=Ubuntu/' ${WORKDIR}/dummysys/etc/default/grub
     fi
-    echo "-- ${WORKDIR}/dummysys/etc/apt/sources.list --" >> ${WORKDIR}/bodhibuilder.log
-    cat ${WORKDIR}/dummysys/etc/apt/sources.list >> ${WORKDIR}/bodhibuilder.log
-    echo "-- /etc/apt/sources.list --" >> ${WORKDIR}/bodhibuilder.log
-    cat /etc/apt/sources.list >> ${WORKDIR}/bodhibuilder.log
-    echo "---------------------------" >> ${WORKDIR}/bodhibuilder.log
+  fi
 
-
-    ## Custom grub config
-    if [ -e /etc/bodhibuilder/grub/grub.bodhi ] ; then
-      log_msg "Found custom grub for ${DISTNAME}"
-      cp -f /etc/bodhibuilder/grub/grub.bodhi ${WORKDIR}/dummysys/etc/default/
-      chmod 644 ${WORKDIR}/dummysys/etc/default/grub.bodhi
-      cp -f /etc/bodhibuilder/grub/grub.bodhi ${WORKDIR}/dummysys/etc/default/grub
-      if [ -d /etc/bodhibuilder/grub/backgrounds ] ; then
-        cp -rf /etc/bodhibuilder/grub/backgrounds/ ${WORKDIR}/dummysys/etc/grub.d/
-      fi
+  # Add script to disable dpms & screensaver in live system.
+  #   This does not run in bodhi or enlightenment because they don't use
+  #   ~/.config/autostart/*.desktop entries for startup.
+  #   It does work in the *buntu's though.
+  which_desktop=`echo $DESKTOP_SESSION`
+  if [ "${which_desktop}" != "enlightenment" ] ; then # enlightenment & moksha use a different method for startup scripts
+    if [ ! -f ${WORKDIR}/dummysys/etc/skel/.config/autostart/iso_boot_script.desktop ] ; then
+      mkdir -p ${WORKDIR}/dummysys/etc/skel/.config/autostart/
+      cp -f /etc/bodhibuilder/isofiles/iso_boot_script.desktop ${WORKDIR}/dummysys/etc/skel/.config/autostart/iso_boot_script.desktop
     fi
+  fi
 
-    # Put a custom name into grub - need to use DISTRIB_DESCRIPTION rather than DISTRIB_ID
-    if [ "${DISTNAME}" ] ; then
-      if [ -e "${WORKDIR}/dummysys/etc/lsb-release" ] ; then
-        sed -i "s/^DISTRIB_DESCRIPTION=.*$/DISTRIB_DESCRIPTION=\"${DISTNAME}\"/" ${WORKDIR}/dummysys/etc/lsb-release
-        sed -i 's/^GRUB_DISTRIBUTOR=.*$/GRUB_DISTRIBUTOR=\`lsb_release -d -s 2> \/dev\/null || echo Debian\`/' ${WORKDIR}/dummysys/etc/default/grub.bodhi
-        sed -i 's/^GRUB_DISTRIBUTOR=.*$/GRUB_DISTRIBUTOR=\`lsb_release -d -s 2> \/dev\/null || echo Debian\`/' ${WORKDIR}/dummysys/etc/default/grub
-      else
-        sed -i 's/^GRUB_DISTRIBUTOR=.*$/GRUB_DISTRIBUTOR=bodhibuilder/' ${WORKDIR}/dummysys/etc/default/grub
-      fi
-    fi
-
-    # Add script to disable dpms & screensaver in live system.
-    #   This does not run in bodhi or enlightenment because they don't use
-    #   ~/.config/autostart/*.desktop entries for startup.
-    #   It does work in the *buntu's though.
-    which_desktop=`echo $DESKTOP_SESSION`
-    if [ "${which_desktop}" != "enlightenment" ] ; then # enlightenment & moksha use a different method for startup scripts
-      if [ ! -f ${WORKDIR}/dummysys/etc/skel/.config/autostart/iso_boot_script.desktop ] ; then
-        mkdir -p ${WORKDIR}/dummysys/etc/skel/.config/autostart/
-        cp -f /etc/bodhibuilder/isofiles/iso_boot_script.desktop ${WORKDIR}/dummysys/etc/skel/.config/autostart/iso_boot_script.desktop
-      fi
-    fi
-
-    # rc.local to run scripts at boot time (non X essential commands)
-    cp -f /etc/bodhibuilder/isofiles/rc.local ${WORKDIR}/dummysys/etc/rc.local
-    chmod 755 ${WORKDIR}/dummysys/etc/rc.local
-    # make ubiquity trusted in the live ISO
-    sed -i "s/__LIVEUSER__/${LIVEUSER}/g" ${WORKDIR}/dummysys/etc/rc.local
+  # rc.local to run scripts at boot time (non X essential commands)
+  cp -f /etc/bodhibuilder/isofiles/rc.local ${WORKDIR}/dummysys/etc/rc.local
+  chmod 755 ${WORKDIR}/dummysys/etc/rc.local
+  # make ubiquity trusted in the live ISO
+  sed -i "s/__LIVEUSER__/${LIVEUSER}/g" ${WORKDIR}/dummysys/etc/rc.local
 
 
-    log_msg "Cleaning up files not needed for the live in ${WORKDIR}/dummysys"
-    rm -rf ${WORKDIR}/dummysys/etc/apt/sources.list.d/*.save &> /dev/null
-    rm -rf ${WORKDIR}/dummysys/etc/apt/apt.conf.d/* &> /dev/null
-    rm -rf ${WORKDIR}/dummysys/etc/apt/preferences.d/* &> /dev/null
-    rm -rf ${WORKDIR}/dummysys/var/lib/apt/lists/* -vf &> /dev/null
-    rm -rf ${WORKDIR}/dummysys/var/lib/apt/lists/lock &> /dev/null
-    find ${WORKDIR}/dummysys/var/cache/apt -type f -exec rm -rf '{}' \; &> /dev/null
-    find ${WORKDIR}/dummysys/var/cache/apt-xapian-index -type f -exec rm -rf '{}' \; &> /dev/null
-    find ${WORKDIR}/dummysys/var/lib/apt -type f -exec rm -rf '{}' \; &> /dev/null
-    rm -rf ${WORKDIR}/dummysys/var/lib/ureadahead/pack &> /dev/null
-    rm -f ${WORKDIR}/dummysys/etc/X11/xorg.conf*
-    rm -f ${WORKDIR}/dummysys/etc/{hosts,hostname,mtab*,fstab}
-    if [ ! -L ${WORKDIR}/dummysys/etc/resolv.conf ] ; then
-        rm -f ${WORKDIR}/dummysys/etc/resolv.conf
-    fi
-    rm -f ${WORKDIR}/dummysys/etc/udev/rules.d/70-persistent*
-    rm -f ${WORKDIR}/dummysys/etc/cups/ssl/{server.crt,server.key}
-    rm -f ${WORKDIR}/dummysys/etc/ssh/*key*
-    rm -f ${WORKDIR}/dummysys/var/lib/dbus/machine-id
-    rsync -a /dev/urandom ${WORKDIR}/dummysys/dev/
-    # fix - this rm is screwing up permissions & ownerships for log files, so removing the find in "${WORKDIR}/dummysys/var/log/"
-    #~ find ${WORKDIR}/dummysys/var/log/ ${WORKDIR}/dummysys/var/lock/ ${WORKDIR}/dummysys/var/backups/ ${WORKDIR}/dummysys/var/tmp/ ${WORKDIR}/dummysys/var/crash/ ${WORKDIR}/dummysys/var/lib/ubiquity/ -type f -exec rm -f {} \;
-    find ${WORKDIR}/dummysys/var/lock/ ${WORKDIR}/dummysys/var/backups/ ${WORKDIR}/dummysys/var/tmp/ ${WORKDIR}/dummysys/var/crash/ ${WORKDIR}/dummysys/var/lib/ubiquity/ -type f -exec rm -f {} \;
+  log_msg "Cleaning up files not needed for the live in ${WORKDIR}/dummysys"
+  rm -rf ${WORKDIR}/dummysys/etc/apt/sources.list.d/*.save &> /dev/null
+  rm -rf ${WORKDIR}/dummysys/etc/apt/apt.conf.d/* &> /dev/null
+  rm -rf ${WORKDIR}/dummysys/etc/apt/preferences.d/* &> /dev/null
+  rm -rf ${WORKDIR}/dummysys/var/lib/apt/lists/* -vf &> /dev/null
+  rm -rf ${WORKDIR}/dummysys/var/lib/apt/lists/lock &> /dev/null
+  find ${WORKDIR}/dummysys/var/cache/apt -type f -exec rm -rf '{}' \; &> /dev/null
+  find ${WORKDIR}/dummysys/var/cache/apt-xapian-index -type f -exec rm -rf '{}' \; &> /dev/null
+  find ${WORKDIR}/dummysys/var/lib/apt -type f -exec rm -rf '{}' \; &> /dev/null
+  rm -rf ${WORKDIR}/dummysys/var/lib/ureadahead/pack &> /dev/null
+  rm -f ${WORKDIR}/dummysys/etc/X11/xorg.conf*
+  rm -f ${WORKDIR}/dummysys/etc/{hosts,hostname,mtab*,fstab}
+  if [ ! -L ${WORKDIR}/dummysys/etc/resolv.conf ] ; then
+      rm -f ${WORKDIR}/dummysys/etc/resolv.conf
+  fi
+  rm -f ${WORKDIR}/dummysys/etc/udev/rules.d/70-persistent*
+  rm -f ${WORKDIR}/dummysys/etc/cups/ssl/{server.crt,server.key}
+  rm -f ${WORKDIR}/dummysys/etc/ssh/*key*
+  rm -f ${WORKDIR}/dummysys/var/lib/dbus/machine-id
+  rsync -a /dev/urandom ${WORKDIR}/dummysys/dev/
+  # fix - this rm is screwing up permissions & ownerships for log files, so removing the find in "${WORKDIR}/dummysys/var/log/"
+  #~ find ${WORKDIR}/dummysys/var/log/ ${WORKDIR}/dummysys/var/lock/ ${WORKDIR}/dummysys/var/backups/ ${WORKDIR}/dummysys/var/tmp/ ${WORKDIR}/dummysys/var/crash/ ${WORKDIR}/dummysys/var/lib/ubiquity/ -type f -exec rm -f {} \;
+  find ${WORKDIR}/dummysys/var/lock/ ${WORKDIR}/dummysys/var/backups/ ${WORKDIR}/dummysys/var/tmp/ ${WORKDIR}/dummysys/var/crash/ ${WORKDIR}/dummysys/var/lib/ubiquity/ -type f -exec rm -f {} \;
 
 
-    if [ "${OPT1}" = "dist" ] ; then
-        rm -rf ${WORKDIR}/dummysys/mnt/*
-        rm -rf ${WORKDIR}/dummysys/media/*
-        mkdir ${WORKDIR}/dummysys/media/cdrom
-        rm -f ${WORKDIR}/dummysys/etc/{group,passwd,shadow,shadow-,gshadow,gshadow-}
-        rm -f ${WORKDIR}/dummysys/etc/wicd/{wired-settings.conf,wireless-settings.conf}
-        rm -rf ${WORKDIR}/dummysys/etc/NetworkManager/system-connections/*
-        rm -f ${WORKDIR}/dummysys/etc/printcap
-        rm -f ${WORKDIR}/dummysys/etc/cups/printers.conf
-        touch ${WORKDIR}/dummysys/etc/printcap
-        touch ${WORKDIR}/dummysys/etc/cups/printers.conf
-        rm -rf ${WORKDIR}/dummysys/etc/apt/sources.list.d/*
-        rm -f ${WORKDIR}/dummysys/var/cache/apt/*pkgcache.bin
-        rm -f ${WORKDIR}/dummysys/var/lib/mlocate/*
-        #~ rm -rf ${WORKDIR}/dummysys/var/cache/gdm/*
-        rm -rf ${WORKDIR}/dummysys/var/lib/sudo/*
-        rm -rf ${WORKDIR}/dummysys/var/lib/AccountsService/users/*
-        rm -rf ${WORKDIR}/dummysys/var/lib/kdm/*
-        rm -rf ${WORKDIR}/dummysys/var/run/console/*
+  if [ "${OPT1}" = "dist" ] ; then
+      rm -rf ${WORKDIR}/dummysys/mnt/*
+      rm -rf ${WORKDIR}/dummysys/media/*
+      mkdir ${WORKDIR}/dummysys/media/cdrom
+      rm -f ${WORKDIR}/dummysys/etc/{group,passwd,shadow,shadow-,gshadow,gshadow-}
+      rm -f ${WORKDIR}/dummysys/etc/wicd/{wired-settings.conf,wireless-settings.conf}
+      rm -rf ${WORKDIR}/dummysys/etc/NetworkManager/system-connections/*
+      rm -f ${WORKDIR}/dummysys/etc/printcap
+      rm -f ${WORKDIR}/dummysys/etc/cups/printers.conf
+      touch ${WORKDIR}/dummysys/etc/printcap
+      touch ${WORKDIR}/dummysys/etc/cups/printers.conf
+      rm -rf ${WORKDIR}/dummysys/etc/apt/sources.list.d/*
+      rm -f ${WORKDIR}/dummysys/var/cache/apt/*pkgcache.bin
+      rm -f ${WORKDIR}/dummysys/var/lib/mlocate/*
+      #~ rm -rf ${WORKDIR}/dummysys/var/cache/gdm/*
+      rm -rf ${WORKDIR}/dummysys/var/lib/sudo/*
+      rm -rf ${WORKDIR}/dummysys/var/lib/AccountsService/users/*
+      rm -rf ${WORKDIR}/dummysys/var/lib/kdm/*
+      rm -rf ${WORKDIR}/dummysys/var/run/console/*
 #        rm -f ${WORKDIR}/dummysys/etc/gdm/gdm.conf-custom
-        rm -f ${WORKDIR}/dummysys/etc/gdm3/gdm3.conf-custom
-        rm -f ${WORKDIR}/dummysys/etc/gdm3/custom.conf
-        rm -rf ${WORKDIR}/dummysys/var/cache/gdm3/*
+      rm -f ${WORKDIR}/dummysys/etc/gdm3/gdm3.conf-custom
+      rm -f ${WORKDIR}/dummysys/etc/gdm3/custom.conf
+      rm -rf ${WORKDIR}/dummysys/var/cache/gdm3/*
 
-        if [ ! -d /run ] ; then
-            find ${WORKDIR}/dummysys/var/run/ ${WORKDIR}/dummysys/var/mail/ ${WORKDIR}/dummysys/var/spool/ -type f -exec rm -f {} \;
-        else
-            find ${WORKDIR}/dummysys/var/mail/ ${WORKDIR}/dummysys/var/spool/ -type f -exec rm -f {} \;
-            unlink ${WORKDIR}/dummysys/var/run
-            cd ${WORKDIR}/dummysys/var
-            ln -sf ../run run
-        fi
-
-        ## create log files
-        # use this to preserve file ownership & permissions, but blank out the log files
-        log_msg "Blanking out var/log/ files"
-        find ${WORKDIR}/dummysys/var/log/ -type f -exec truncate -s 0 {} \;
-        # update the timestamp to right now
-        log_msg "Updating timestamp on var/log files"
-        find ${WORKDIR}/dummysys/var/log/ -exec touch {} \;
-
-
-
-        ## Locale and locate fixes added by uberstudent - notes below
-        log_msg "Purging pre-existing generated locale(s) from dummysys"
-        # Fixes http://forums.bodhilinux.com/index.php?/topic/10506-installation-crashes-by-some-languages-rc1/
-        # Ubiquity fails if the installation locale differs from the generated locale, so simply removing the
-        # generated locale confs fixes the issue.
-        if [ -e ${WORKDIR}/dummysys/etc/default/locale ] ; then
-            rm -f ${WORKDIR}/dummysys/etc/default/locale
-        fi
-        if [ -e ${WORKDIR}/dummysys/var/lib/locales/supported.d/local ] ; then
-            rm -f ${WORKDIR}/dummysys/var/lib/locales/supported.d/local
-        fi
-
-        log_msg "Cleaning locate database within dummysys"
-        # Blank the locale db because it can be a privacy issue, and can be
-        # rather large, and then regenerate it within the dummysys.
-        if [ -e ${WORKDIR}/dummysys/var/lib/mlocate/mlocate.db ]; then
-            rm -f ${WORKDIR}/dummysys/var/lib/mlocate/mlocate.db
-            updatedb -l 1 -o ${WORKDIR}/dummysys/var/lib/mlocate/mlocate.db
-        fi
-
-
-        # If lightdm has an autologin-user in lightdm.conf, change it to ${LIVEUSER}
-        if [ "${currentdm}" == "lightdm" ] ; then
-          if [ -f "${WORKDIR}/dummysys/etc/lightdm/lightdm.conf" ] ; then
-            ldm_auto_login_check=`grep -o 'autologin-user=' ${WORKDIR}/dummysys/etc/lightdm/lightdm.conf`
-            if [ "${ldm_auto_login_check}" ] ; then
-              sed -i "s/^autologin-user=.*\$/autologin-user=${LIVEUSER}/g" ${WORKDIR}/dummysys/etc/lightdm/lightdm.conf
-            fi
-          fi
-        fi
-
-
-        log_msg "Cleaning up passwd, group, shadow and gshadow files for the live system"
-
-        grep '^[^:]*:[^:]*:[0-9]:' /etc/passwd > ${WORKDIR}/dummysys/etc/passwd
-        grep '^[^:]*:[^:]*:[0-9][0-9]:' /etc/passwd >> ${WORKDIR}/dummysys/etc/passwd
-        grep '^[^:]*:[^:]*:[0-9][0-9][0-9]:' /etc/passwd >> ${WORKDIR}/dummysys/etc/passwd
-        grep '^[^:]*:[^:]*:[3-9][0-9][0-9][0-9][0-9]:' /etc/passwd >> ${WORKDIR}/dummysys/etc/passwd
-
-        grep '^[^:]*:[^:]*:[0-9]:' /etc/group > ${WORKDIR}/dummysys/etc/group
-        grep '^[^:]*:[^:]*:[0-9][0-9]:' /etc/group >> ${WORKDIR}/dummysys/etc/group
-        grep '^[^:]*:[^:]*:[0-9][0-9][0-9]:' /etc/group >> ${WORKDIR}/dummysys/etc/group
-        grep '^[^:]*:[^:]*:[3-9][0-9][0-9][0-9][0-9]:' /etc/group >> ${WORKDIR}/dummysys/etc/group
-
-        grep '^[^:]*:[^:]*:[5-9][0-9][0-9]:' /etc/passwd | awk -F ":" '{print $1}'> ${WORKDIR}/tmpusers1
-        grep '^[^:]*:[^:]*:[1-9][0-9][0-9][0-9]:' /etc/passwd | awk -F ":" '{print $1}'> ${WORKDIR}/tmpusers2
-        grep '^[^:]*:[^:]*:[1-2][0-9][0-9][0-9][0-9]:' /etc/passwd | awk -F ":" '{print $1}'> ${WORKDIR}/tmpusers3
-
-        cat ${WORKDIR}/tmpusers1 ${WORKDIR}/tmpusers2 ${WORKDIR}/tmpusers3 > ${WORKDIR}/tmpusers
-        rm -f ${WORKDIR}/tmpusers[0-9] &> /dev/null
-
-        cat ${WORKDIR}/tmpusers | while read LINE ;do
-          echo ${LINE} | xargs -i sed -e 's/,{}$//g' ${WORKDIR}/dummysys/etc/group > ${WORKDIR}/dummysys/etc/group.new1
-          echo ${LINE} | xargs -i sed -e 's/,{},/,/g' ${WORKDIR}/dummysys/etc/group.new1 > ${WORKDIR}/dummysys/etc/group.new2
-          echo ${LINE} | xargs -i sed -e 's/:{}$/:/g' ${WORKDIR}/dummysys/etc/group.new2 > ${WORKDIR}/dummysys/etc/group.new3
-          echo ${LINE} | xargs -i sed -e 's/:{},/:/g' ${WORKDIR}/dummysys/etc/group.new3 > ${WORKDIR}/dummysys/etc/group
-          rm -f ${WORKDIR}/dummysys/etc/group.new* &> /dev/null
-        done
-
-    fi
-
-
-    # make sure the adduser and autologin functions of casper as set according to the mode
-    log_msg "Making sure adduser and autologin functions of casper are set properly"
-    [ "${OPT1}" = "dist" ] && [ ! -d ${WORKDIR}/dummysys/home ] && mkdir ${WORKDIR}/dummysys/home
-    [ "${OPT1}" = "dist" ] && chmod 755 /usr/share/initramfs-tools/scripts/casper-bottom/*adduser /usr/share/initramfs-tools/scripts/casper-bottom/*autologin /usr/share/initramfs-tools/scripts/casper
-    [ "${OPT1}" = "backup" ] && [ -d ${WORKDIR}/dummysys/home ] && rm -rf ${WORKDIR}/dummysys/home
-    [ "${OPT1}" = "backup" ] && chmod 644 /usr/share/initramfs-tools/scripts/casper-bottom/*adduser /usr/share/initramfs-tools/scripts/casper-bottom/*autologin /usr/share/initramfs-tools/scripts/casper
-
-
-    # copy over some of the necessary stuff for the livecd
-
-    log_msg "Checking internet connection..."
-    netconnstatus=`dig | grep -o 'Got answer'` # report if ANY network hardware is connected
-    if [ "${netconnstatus}" ] ; then
-      #~ inetstatus=`wget -q --tries=10 --timeout=20 --spider http://ubuntu.com; echo $?`
-      inetstatus=`wget -q --timeout=20 --spider www.ubuntu.com; echo $?`
-      if [ "${inetstatus}" -ne 0 ] ; then # if above failed, do a double-check with google
-        log_msg "   Could not connect to www.ubuntu.com"
-        inetstatus=`wget -q --timeout=20 --spider www.google.com; echo $?`
-        if [ "${inetstatus}" -ne 0 ] ; then # if above failed, do a triple-check with cisco
-        log_msg "   Could not connect to www.google.com"
-          inetstatus=`wget -q --timeout=20 --spider www.cisco.com; echo $?`
-          if [ "${inetstatus}" -ne 0 ] ; then # Internet connectivity fail
-           log_msg "   Could not connect to www.cisco.com"
-          fi
-        fi
-      fi
-    else # no hardware is connected
-      inetstatus=1 # set to 1 to skip downloading of deb packages
-    fi
-
-    if [ "${inetstatus}" -eq 0 ] ; then # internet connection detected
-      log_msg "connection to internet detected"
-      # make sure apt-get cache is updated, or it might try to download the wrong version
-      log_msg "Updating repos"
-      apt-get update >>${WORKDIR}/bodhibuilder.log
-      log_msg "Installing dpkg-dev if it's not already installed"
-      apt-get install -y -q --no-install-recommends dpkg-dev >>${WORKDIR}/bodhibuilder.log #CHARLES
-
-
-# T/S - don't download packages for 32-bit install because it *should* already have all necessary packages installed already
-      # packages to be downloaded and moved into pool: -- 32/64-bit -- ONE directory
-      #~ if [ "${UBUVERSION}" -le 14 ] ; then # legacy list of packages for Ubuntu 14.x and earlier
-        #~ dlpkg_32="b43-fwcutter bcmwl-kernel-source dkms efibootmgr fakeroot grub-common grub-efi grub-efi-amd64 grub-efi-amd64-bin grub-efi-ia32 grub-efi-ia32-bin grub-pc grub-pc-bin grub2-common libfakeroot libuniconf4.6 libwvstreams4.6-base libwvstreams4.6-extras lupin-support mouseemu oem-config oem-config-gtk oem-config-slideshow-ubuntu secureboot-db setserial user-setup wvdial" # 32-bit packages
-        #~ dlpkg_64="grub-efi-amd64-signed shim shim-signed" # 64-bit packages
-      #~ elif [ "${UBUVERSION}" -le 16 ] ; then # list of packages for Ubuntu 16.x
-        #~ dlpkg_32="b43-fwcutter bcmwl-kernel-source dkms efibootmgr fakeroot grub-common grub-efi grub-efi-amd64 grub-efi-amd64-bin grub-efi-ia32 grub-efi-ia32-bin grub-pc grub-pc-bin grub2-common libfakeroot libuniconf4.6 libwvstreams4.6-base libwvstreams4.6-extras lupin-support mokutil mouseemu oem-config oem-config-gtk oem-config-slideshow-ubuntu sbsigntool secureboot-db setserial user-setup wvdial" # 32-bit packages
-        #~ dlpkg_64="grub-efi-amd64-signed shim shim-signed" # 64-bit packages
-      #~ else # Ubuntu 18.x
-        if [ "${ARCH}" == "amd64" ] ; then # New in U18.x, use the 00_packages.list files to determine which debs to download. Managing this list in those files now.
-            #~ dlpkg_32=""
-            dlpkg_64=`cat /etc/bodhibuilder/debs/amd64/00_packages.list`
-        #~ else
-            #~ dlpkg_32=`cat /etc/bodhibuilder/debs/i386/00_packages.list`
-        fi
-      #~ fi
-
-      dlpkgfail="0"
-      if [ "${ARCH}"== "amd64" ] ; then
-          #~ dlpkg_all="${dlpkg_32} ${dlpkg_64}"
-          dlpkg_all="${dlpkg_64}"
-          
-                              log_msg "  downloading latest deb files for ${ARCH} packages:"
-                              log_msg "${dlpkg_all}"
-                              # create temp directory in ${WORKDIR}/ ..... now working in ${WORKDIR}/dlpkgtempdir/ while downloading debs
-                              cd ${WORKDIR} && mkdir dlpkgtempdir && cd dlpkgtempdir 
-                        
-                              # download pkgs
-                              apt-get download ${dlpkg_all} | ${tee_log}
-                              chmod 755 ./* # still working in dlpkgtempdir
-                        
-                              # make sure ALL files were successfully downloaded
-                              for dlpkgchk in ${dlpkg_all} ; do
-                                if [ ! -e ./${dlpkgchk}_* ] ; then
-                                  dlpkgfail="1" && log_msg "dlpkgfail"
-                                  echo "file ${dlpkgchk}_(Some.New.Rev.Num)  -  does NOT exist." >>${WORKDIR}/bodhibuilder.log
-                                else
-                                  dlpkgchkname=`ls -b ./${dlpkgchk}_*`
-                                  echo "file ${dlpkgchkname} exists" >>${WORKDIR}/bodhibuilder.log
-                                fi
-                              done
-                        
-                              # Didn't get all files downloaded, so get rid of temp directory
-                              if [ "${dlpkgfail}" = "1" ] ; then 
-                                cd ${WORKDIR} && rm -rf ./dlpkgtempdir
-                              fi
+      if [ ! -d /run ] ; then
+          find ${WORKDIR}/dummysys/var/run/ ${WORKDIR}/dummysys/var/mail/ ${WORKDIR}/dummysys/var/spool/ -type f -exec rm -f {} \;
       else
-          #~ dlpkg_all="${dlpkg_32}"
-          log_msg "  not downloading deb files for ${ARCH} packages"
-          dlpkgfail="1" && log_msg "dlpkgfail" # set this cuz now not downloading packages for 32-bit
+          find ${WORKDIR}/dummysys/var/mail/ ${WORKDIR}/dummysys/var/spool/ -type f -exec rm -f {} \;
+          unlink ${WORKDIR}/dummysys/var/run
+          cd ${WORKDIR}/dummysys/var
+          ln -sf ../run run
       fi
 
-      #~ log_msg "  downloading latest deb files for ${ARCH} packages:"
-      #~ log_msg "${dlpkg_all}"
-      #~ # create temp directory in ${WORKDIR}/ ..... now working in ${WORKDIR}/dlpkgtempdir/ while downloading debs
-      #~ cd ${WORKDIR} && mkdir dlpkgtempdir && cd dlpkgtempdir 
-
-      #~ # download pkgs
-      #~ apt-get download ${dlpkg_all} | ${tee_log}
-      #~ chmod 755 ./* # still working in dlpkgtempdir
-
-      #~ # make sure ALL files were successfully downloaded
-      #~ dlpkgfail="0"
-      #~ for dlpkgchk in ${dlpkg_all} ; do
-        #~ if [ ! -e ./${dlpkgchk}_* ] ; then
-          #~ dlpkgfail="1"
-          #~ echo "file ${dlpkgchk}_(Some.New.Rev.Num)  -  does NOT exist." >>${WORKDIR}/bodhibuilder.log
-        #~ else
-          #~ dlpkgchkname=`ls -b ./${dlpkgchk}_*`
-          #~ echo "file ${dlpkgchkname} exists" >>${WORKDIR}/bodhibuilder.log
-        #~ fi
-      #~ done
-
-      #~ # Didn't get all files downloaded, so get rid of temp directory
-      #~ if [ "${dlpkgfail}" = "1" ] ; then 
-        #~ cd ${WORKDIR} && rm -rf ./dlpkgtempdir
-      #~ fi
+      ## create log files
+      # use this to preserve file ownership & permissions, but blank out the log files
+      log_msg "Blanking out var/log/ files"
+      find ${WORKDIR}/dummysys/var/log/ -type f -exec truncate -s 0 {} \;
+      # update the timestamp to right now
+      log_msg "Updating timestamp on var/log files"
+      find ${WORKDIR}/dummysys/var/log/ -exec touch {} \;
 
 
-    else # no internet connection detected
-      log_msg "no connection to internet detected"
-      log_msg "...not downloading latest uefi pool debs"
-      dlpkgfail="1" && log_msg "dlpkgfail"
+
+      ## Locale and locate fixes added by uberstudent - notes below
+      log_msg "Purging pre-existing generated locale(s) from dummysys"
+      # Fixes http://forums.bodhilinux.com/index.php?/topic/10506-installation-crashes-by-some-languages-rc1/
+      # Ubiquity fails if the installation locale differs from the generated locale, so simply removing the
+      # generated locale confs fixes the issue.
+      if [ -e ${WORKDIR}/dummysys/etc/default/locale ] ; then
+          rm -f ${WORKDIR}/dummysys/etc/default/locale
+      fi
+      if [ -e ${WORKDIR}/dummysys/var/lib/locales/supported.d/local ] ; then
+          rm -f ${WORKDIR}/dummysys/var/lib/locales/supported.d/local
+      fi
+
+      log_msg "Cleaning locate database within dummysys"
+      # Blank the locale db because it can be a privacy issue, and can be
+      # rather large, and then regenerate it within the dummysys.
+      if [ -e ${WORKDIR}/dummysys/var/lib/mlocate/mlocate.db ]; then
+          rm -f ${WORKDIR}/dummysys/var/lib/mlocate/mlocate.db
+          updatedb -l 1 -o ${WORKDIR}/dummysys/var/lib/mlocate/mlocate.db
+      fi
+
+
+      # If lightdm has an autologin-user in lightdm.conf, change it to ${LIVEUSER}
+      if [ "${currentdm}" == "lightdm" ] ; then
+        if [ -f "${WORKDIR}/dummysys/etc/lightdm/lightdm.conf" ] ; then
+          ldm_auto_login_check=`grep -o 'autologin-user=' ${WORKDIR}/dummysys/etc/lightdm/lightdm.conf`
+          if [ "${ldm_auto_login_check}" ] ; then
+            sed -i "s/^autologin-user=.*\$/autologin-user=${LIVEUSER}/g" ${WORKDIR}/dummysys/etc/lightdm/lightdm.conf
+          fi
+        fi
+      fi
+
+
+      log_msg "Cleaning up passwd, group, shadow and gshadow files for the live system"
+
+      grep '^[^:]*:[^:]*:[0-9]:' /etc/passwd > ${WORKDIR}/dummysys/etc/passwd
+      grep '^[^:]*:[^:]*:[0-9][0-9]:' /etc/passwd >> ${WORKDIR}/dummysys/etc/passwd
+      grep '^[^:]*:[^:]*:[0-9][0-9][0-9]:' /etc/passwd >> ${WORKDIR}/dummysys/etc/passwd
+      grep '^[^:]*:[^:]*:[3-9][0-9][0-9][0-9][0-9]:' /etc/passwd >> ${WORKDIR}/dummysys/etc/passwd
+
+      grep '^[^:]*:[^:]*:[0-9]:' /etc/group > ${WORKDIR}/dummysys/etc/group
+      grep '^[^:]*:[^:]*:[0-9][0-9]:' /etc/group >> ${WORKDIR}/dummysys/etc/group
+      grep '^[^:]*:[^:]*:[0-9][0-9][0-9]:' /etc/group >> ${WORKDIR}/dummysys/etc/group
+      grep '^[^:]*:[^:]*:[3-9][0-9][0-9][0-9][0-9]:' /etc/group >> ${WORKDIR}/dummysys/etc/group
+
+      grep '^[^:]*:[^:]*:[5-9][0-9][0-9]:' /etc/passwd | awk -F ":" '{print $1}'> ${WORKDIR}/tmpusers1
+      grep '^[^:]*:[^:]*:[1-9][0-9][0-9][0-9]:' /etc/passwd | awk -F ":" '{print $1}'> ${WORKDIR}/tmpusers2
+      grep '^[^:]*:[^:]*:[1-2][0-9][0-9][0-9][0-9]:' /etc/passwd | awk -F ":" '{print $1}'> ${WORKDIR}/tmpusers3
+
+      cat ${WORKDIR}/tmpusers1 ${WORKDIR}/tmpusers2 ${WORKDIR}/tmpusers3 > ${WORKDIR}/tmpusers
+      rm -f ${WORKDIR}/tmpusers[0-9] &> /dev/null
+
+      cat ${WORKDIR}/tmpusers | while read LINE ;do
+        echo ${LINE} | xargs -i sed -e 's/,{}$//g' ${WORKDIR}/dummysys/etc/group > ${WORKDIR}/dummysys/etc/group.new1
+        echo ${LINE} | xargs -i sed -e 's/,{},/,/g' ${WORKDIR}/dummysys/etc/group.new1 > ${WORKDIR}/dummysys/etc/group.new2
+        echo ${LINE} | xargs -i sed -e 's/:{}$/:/g' ${WORKDIR}/dummysys/etc/group.new2 > ${WORKDIR}/dummysys/etc/group.new3
+        echo ${LINE} | xargs -i sed -e 's/:{},/:/g' ${WORKDIR}/dummysys/etc/group.new3 > ${WORKDIR}/dummysys/etc/group
+        rm -f ${WORKDIR}/dummysys/etc/group.new* &> /dev/null
+      done
+
+  fi
+
+
+  # make sure the adduser and autologin functions of casper as set according to the mode
+  log_msg "Making sure adduser and autologin functions of casper are set properly"
+  [ "${OPT1}" = "dist" ] && [ ! -d ${WORKDIR}/dummysys/home ] && mkdir ${WORKDIR}/dummysys/home
+  [ "${OPT1}" = "dist" ] && chmod 755 /usr/share/initramfs-tools/scripts/casper-bottom/*adduser /usr/share/initramfs-tools/scripts/casper-bottom/*autologin /usr/share/initramfs-tools/scripts/casper
+  [ "${OPT1}" = "backup" ] && [ -d ${WORKDIR}/dummysys/home ] && rm -rf ${WORKDIR}/dummysys/home
+  [ "${OPT1}" = "backup" ] && chmod 644 /usr/share/initramfs-tools/scripts/casper-bottom/*adduser /usr/share/initramfs-tools/scripts/casper-bottom/*autologin /usr/share/initramfs-tools/scripts/casper
+
+
+  # copy over some of the necessary stuff for the livecd
+
+  log_msg "Checking internet connection..."
+  netconnstatus=`dig | grep -o 'Got answer'` # report if ANY network hardware is connected
+  if [ "${netconnstatus}" ] ; then
+    #~ inetstatus=`wget -q --tries=10 --timeout=20 --spider http://ubuntu.com; echo $?`
+    inetstatus=`wget -q --timeout=20 --spider www.ubuntu.com; echo $?`
+    if [ "${inetstatus}" -ne 0 ] ; then # if above failed, do a double-check with google
+      log_msg "   Could not connect to www.ubuntu.com"
+      inetstatus=`wget -q --timeout=20 --spider www.google.com; echo $?`
+      if [ "${inetstatus}" -ne 0 ] ; then # if above failed, do a triple-check with cisco
+      log_msg "   Could not connect to www.google.com"
+        inetstatus=`wget -q --timeout=20 --spider www.cisco.com; echo $?`
+        if [ "${inetstatus}" -ne 0 ] ; then # Internet connectivity fail
+         log_msg "   Could not connect to www.cisco.com"
+        fi
+      fi
     fi
+  else # no hardware is connected
+    inetstatus=1 # set to 1 to skip downloading of deb packages
+  fi
 
-    ### add this when there's time
-    ### (also add this to /etc/bodhibuilder.conf, bodhibuilder-gtk.py, & bodhibuilder-gtk.glade)
-    #~ # Option to stop the ISO creation if the system has not been dist-upgraded
-    #~ #   1= warning message & stop creation | 0= just keep going | anythingelse= just keep going
-    #~ NOUPGRADE_STOP_ISO="0"
-    #~  
-    #~ # Check to see if the system as been dist-upgrade'd
-    #~ if [ "${NOUPGRADE_STOP_ISO}" == "1" ] ; then
-      #~ needs_dist_upgrade="`apt-get dist-upgrade --assume-no | grep 'The following packages will be upgraded'`"
-      #~ if [ "${needs_dist_upgrade}" ] ; then
-        #~ log_msg "You have chosen to stop ISO creation if the system has not"
-        #~ log_msg "been dist-upgrade'd."
-        #~ log_msg "To change this behavior, change NOUPGRADE_STOP_ISO"
-        #~ log_msg "in /etc/bodhibuilder.conf to equal 0."
-        #~ log_msg "exiting"
-        #~ return
-      #~ else
-        #~ log_msg "Good, the system is dist-upgrade'd"
-      #~ fi
-    #~ else
-      #~ log_msg "Not stopping for dist-upgrade check"
+  if [ "${inetstatus}" -eq 0 ] ; then # internet connection detected
+    log_msg "connection to internet detected"
+    # make sure apt-get cache is updated, or it might try to download the wrong version
+    log_msg "Updating repos"
+    apt-get update >>${WORKDIR}/bodhibuilder.log
+    log_msg "Installing dpkg-dev if it's not already installed"
+    apt-get install -y -q --no-install-recommends dpkg-dev >>${WORKDIR}/bodhibuilder.log #CHARLES
+
+
+    # packages to be downloaded and moved into pool: -- 32/64-bit -- ONE directory
+    #~ if [ "${UBUVERSION}" -le 14 ] ; then # legacy list of packages for Ubuntu 14.x and earlier
+      #~ dlpkg_32="b43-fwcutter bcmwl-kernel-source dkms efibootmgr fakeroot grub-common grub-efi grub-efi-amd64 grub-efi-amd64-bin grub-efi-ia32 grub-efi-ia32-bin grub-pc grub-pc-bin grub2-common libfakeroot libuniconf4.6 libwvstreams4.6-base libwvstreams4.6-extras lupin-support mouseemu oem-config oem-config-gtk oem-config-slideshow-ubuntu secureboot-db setserial user-setup wvdial" # 32-bit packages
+      #~ dlpkg_64="grub-efi-amd64-signed shim shim-signed" # 64-bit packages
+    #~ elif [ "${UBUVERSION}" -le 16 ] ; then # list of packages for Ubuntu 16.x
+      #~ dlpkg_32="b43-fwcutter bcmwl-kernel-source dkms efibootmgr fakeroot grub-common grub-efi grub-efi-amd64 grub-efi-amd64-bin grub-efi-ia32 grub-efi-ia32-bin grub-pc grub-pc-bin grub2-common libfakeroot libuniconf4.6 libwvstreams4.6-base libwvstreams4.6-extras lupin-support mokutil mouseemu oem-config oem-config-gtk oem-config-slideshow-ubuntu sbsigntool secureboot-db setserial user-setup wvdial" # 32-bit packages
+      #~ dlpkg_64="grub-efi-amd64-signed shim shim-signed" # 64-bit packages
+    #~ else # Ubuntu 18.x
+
+      # New in U18.x, use the 00_packages.list files to determine which debs to download. Managing this list in those files now.
+      if [ "${ARCH}" == "amd64" ] ; then
+          ##~ dlpkg_64=`cat /etc/bodhibuilder/debs/amd64/00_packages.list`
+          dlpkg_all=`cat /etc/bodhibuilder/debs/amd64/00_packages.list`
+      else
+          ##~ dlpkg_32=`cat /etc/bodhibuilder/debs/i386/00_packages.list`
+          dlpkg_all=`cat /etc/bodhibuilder/debs/i386/00_packages.list`
+      fi
     #~ fi
 
-    log_msg "Copying arch-specific debs into pool"
+    dlpkgfail="0"
+    log_msg "  downloading latest deb files for ${ARCH} packages:"
+    log_msg "${dlpkg_all}"
+    # create temp directory in ${WORKDIR}/ ..... now working in ${WORKDIR}/dlpkgtempdir/ while downloading debs
+    cd ${WORKDIR} && mkdir dlpkgtempdir && cd dlpkgtempdir 
+
+    # download pkgs
+    apt-get download ${dlpkg_all} | ${tee_log}
+    chmod 755 ./* # still working in dlpkgtempdir
+
+    # make sure ALL files were successfully downloaded
+    for dlpkgchk in ${dlpkg_all} ; do
+      if [ ! -e ./${dlpkgchk}_* ] ; then
+        dlpkgfail="1" && log_msg "dlpkgfail"
+        echo "file ${dlpkgchk}_(Some.New.Rev.Num)  -  does NOT exist." >>${WORKDIR}/bodhibuilder.log
+      else
+        dlpkgchkname=`ls -b ./${dlpkgchk}_*`
+        echo "file ${dlpkgchkname} exists" >>${WORKDIR}/bodhibuilder.log
+      fi
+    done
+
+    # Didn't get all files downloaded, so get rid of temp directory
+    if [ "${dlpkgfail}" = "1" ] ; then
+      log_msg "Not able to download all deb files"
+      cd ${WORKDIR} && rm -rf ./dlpkgtempdir
+    fi
+
+
+  else # no internet connection detected
+    log_msg "no connection to internet detected"
+    log_msg "...not downloading latest uefi pool debs"
+    dlpkgfail="1" && log_msg "dlpkgfail"
+    echo "pwd -->  ${PWD}" >>${WORKDIR}/bodhibuilder.log
+  fi
+
+  ### add this when there's time
+  ### (also add this to /etc/bodhibuilder.conf, bodhibuilder-gtk.py, & bodhibuilder-gtk.glade)
+  #~ # Option to stop the ISO creation if the system has not been dist-upgraded
+  #~ #   1= warning message & stop creation | 0= just keep going | anythingelse= just keep going
+  #~ NOUPGRADE_STOP_ISO="0"
+  #~  
+  #~ # Check to see if the system as been dist-upgrade'd
+  #~ if [ "${NOUPGRADE_STOP_ISO}" == "1" ] ; then
+    #~ needs_dist_upgrade="`apt-get dist-upgrade --assume-no | grep 'The following packages will be upgraded'`"
+    #~ if [ "${needs_dist_upgrade}" ] ; then
+      #~ log_msg "You have chosen to stop ISO creation if the system has not"
+      #~ log_msg "been dist-upgrade'd."
+      #~ log_msg "To change this behavior, change NOUPGRADE_STOP_ISO"
+      #~ log_msg "in /etc/bodhibuilder.conf to equal 0."
+      #~ log_msg "exiting"
+      #~ return
+    #~ else
+      #~ log_msg "Good, the system is dist-upgrade'd"
+    #~ fi
+  #~ else
+    #~ log_msg "Not stopping for dist-upgrade check"
+  #~ fi
+
+
+  log_msg "Moving all EFI files to the ISOTMP folder"
+  yes | cp -av /etc/bodhibuilder/uefi/* ${WORKDIR}/ISOTMP/ >>${WORKDIR}/bodhibuilder.log
+
+  # Add custom DISTNAME to UEFI grub
+  sed -i 's/__DISTNAME__/'"${DISTNAME}"'/g' ${WORKDIR}/ISOTMP/boot/grub/grub.cfg
+
+  # now move deb files section if all have successfully downloaded:
+  #  in the above step, the pool dir is copied into ISOTMP
+  #   (we should still be working IN dlpkgtempdir if dlpkgfail == 0)
+  if [ "${dlpkgfail}" == "0" ] ; then # successful downloads
+    log_msg "deb files successfully downloaded"
+    if [ "${ARCH}" = "amd64" ] ; then
+      log_msg "64-bit OS, moving deb files into pool"
+    else
+      log_msg "32-bit OS, moving deb files into pool"
+    fi
+    yes | rm -rf ${WORKDIR}/ISOTMP/dists/pool/*
+    yes | mv ${WORKDIR}/dlpkgtempdir/* ${WORKDIR}/ISOTMP/dists/pool/ # mv all new files from dlpkgtempdir into pool
+    cd ${WORKDIR}
+    yes | rm -rf ./dlpkgtempdir
+  else # unsuccessful downloading
+    log_msg "something was wrong with downloading deb files,"
+    log_msg "no new deb files being copied into pool so as to maintain compatibility"
+    pwd >>${WORKDIR}/bodhibuilder.log
+    log_msg "Removing old debs from pool"
+    yes | rm -vrf /etc/bodhibuilder/uefi/dists/pool/* >>${WORKDIR}/bodhibuilder.log
+    log_msg "Copying pre-existing arch-specific debs into pool"
     if [ "${ARCH}" = "amd64" ] ; then
       echo "64-bit arch detected" >>${WORKDIR}/bodhibuilder.log
-      ##~ yes | rm -vrf /etc/bodhibuilder/uefi/pool/* >>${WORKDIR}/bodhibuilder.log
-      yes | rm -vrf /etc/bodhibuilder/uefi/dists/pool/* >>${WORKDIR}/bodhibuilder.log
-      ##~ cp -av /etc/bodhibuilder/debs/amd64/* /etc/bodhibuilder/uefi/pool/ >>${WORKDIR}/bodhibuilder.log
-      cp -av /etc/bodhibuilder/debs/amd64/* /etc/bodhibuilder/uefi/dists/pool/ >>${WORKDIR}/bodhibuilder.log
+      yes | cp -av /etc/bodhibuilder/debs/amd64/* /etc/bodhibuilder/uefi/dists/pool/ >>${WORKDIR}/bodhibuilder.log
     else
       echo "32-bit arch detected" >>${WORKDIR}/bodhibuilder.log
-      echo "Not copying any debs into pool directory" >>${WORKDIR}/bodhibuilder.log
-      ##~ yes | rm -vrf /etc/bodhibuilder/uefi/pool/* >>${WORKDIR}/bodhibuilder.log
-      #~ yes | rm -vrf /etc/bodhibuilder/uefi/dists/pool/* >>${WORKDIR}/bodhibuilder.log
-      ##~ cp -av /etc/bodhibuilder/debs/i386/* /etc/bodhibuilder/uefi/pool/ >>${WORKDIR}/bodhibuilder.log
-      #~ cp -av /etc/bodhibuilder/debs/i386/* /etc/bodhibuilder/uefi/dists/pool/ >>${WORKDIR}/bodhibuilder.log
+      yes | cp -av /etc/bodhibuilder/debs/i386/* /etc/bodhibuilder/uefi/dists/pool/ >>${WORKDIR}/bodhibuilder.log
     fi
+  fi
 
-    log_msg "Moving all EFI files to the ISOTMP folder"
-    cp -av /etc/bodhibuilder/uefi/* ${WORKDIR}/ISOTMP/ >>${WORKDIR}/bodhibuilder.log
+  # Creating a repository for the Ubiquity install
+  #  Note: in order for this to work correctly, the source system
+  #        must be completely upgraded, as in 'apt-get dist-upgrade'
+  log_msg "Creating a Packages.gz repository for the Ubiquity install"
+  # kamwoods - "dists" dir not being created in ISOTMP on some spins
+  if [ -e "${WORKDIR}/ISOTMP/dists" ] ; then
+    rm -f ${WORKDIR}/ISOTMP/dists/Packages.gz | ${tee_log}
+  else
+    mkdir ${WORKDIR}/ISOTMP/dists
+  fi
+  # Creating Packages.gz so the repo is valid
+  log_msg "Creating ${WORKDIR}/ISOTMP/dists/Packages.gz"
+  cd ${WORKDIR}/ISOTMP/dists/
+  dpkg-scanpackages pool /dev/null 2>>${WORKDIR}/bodhibuilder.log | gzip -9c > ./Packages.gz
+  cd -
 
-    # Add custom DISTNAME to UEFI grub
-    sed -i 's/__DISTNAME__/'"${DISTNAME}"'/g' ${WORKDIR}/ISOTMP/boot/grub/grub.cfg
+  #copy any preseed files
+  log_msg "Copying any preseed files"
+  cp /etc/bodhibuilder/preseed/* ${WORKDIR}/ISOTMP/preseed/
 
-    # now move deb files section if all have successfully downloaded:
-    #  in the above step, the pool dir is copied into ISOTMP
-    #   (we should still be working IN dlpkgtempdir if dlpkgfail == 0)
-    if [ "${dlpkgfail}" == "0" ] ; then # successful downloads
-      if [ "${ARCH}" = "amd64" ] ; then
-        log_msg "64-bit OS, moving deb files into pool"
-        ##~ rm -rf ${WORKDIR}/ISOTMP/pool/*
-        rm -rf ${WORKDIR}/ISOTMP/dists/pool/*
-        ##~ mv ${WORKDIR}/dlpkgtempdir/* ${WORKDIR}/ISOTMP/pool/ # mv all new files from dlpkgtempdir into pool
-        mv ${WORKDIR}/dlpkgtempdir/* ${WORKDIR}/ISOTMP/dists/pool/ # mv all new files from dlpkgtempdir into pool
-        cd ${WORKDIR}
-        rm -rf ./dlpkgtempdir
-      else
-        log_msg "32-bit OS, NOT moving deb files into pool"
+  #BOOT Type is isolinux
+  log_msg "Copying memtest86+ for the live system"
+  cp /boot/memtest86+.bin ${WORKDIR}/ISOTMP/install/memtest
+
+  ##### not booting to vmlinuz.efi, just vmlinuz 8/19/2018
+  #~ # BB EFI BOOT
+  #~ # Customize file '/etc/bodhibuilder/isolinux/isolinux.cfg.vesamenu' to point to vmlinuz.efi
+
+  #~ ## Just make it vmlinuz.efi:
+  #~ # (Reason to do this -- /etc/bodhibuilder/uefi/boot/grub/grub.cfg file points to vmlinuz.efi,
+  #~ #  as does /etc/bodhibuilder/isolinux/isolinux.cfg.vesamenu, by default. So far, vmlinuz.efi
+  #~ #  has not hurt anything even if it's not a remaster in a UEFI booted system.)
+  #~ # Forget the above stuff, and have isolinux just point to vmlinuz.efi like this:
+  #~ log_msg "Ensuring isolinux.cfg.vesamenu is UEFI bootable (vmlinuz.efi)"
+  #~ sed -i 's/vmlinuz$/vmlinuz\.efi/g' /etc/bodhibuilder/isolinux/isolinux.cfg.vesamenu
+
+
+  # check and see if they have a custom isolinux already setup. eg. they copied over
+  # the isolinux folder from their original livecd or made a custom one for their distro
+  # and get files isohdpfx.bin & isolinux.bin
+  if [ ! -f /etc/bodhibuilder/customisolinux/isolinux.cfg ] ; then # no custom isolinux (bb default)
+      log_msg "Creating isolinux setup for the live system"
+      find /usr/lib/ -name 'isohdpfx.bin' -exec cp -f {} ${WORKDIR}/ISOTMP/isolinux/ \;
+      find /usr/lib/ -name 'isolinux.bin' -exec cp -f {} ${WORKDIR}/ISOTMP/isolinux/ \;
+      #find fix for vesamenu.32 provided by Krasimir S. Stefanov <lokiisyourmaster@gmail.com>
+      if [ "${UBUVERSION}" -le 14 ] ; then
+        VESAMENU=`find /usr/lib/ -name "vesamenu.c32" | grep "syslinux/vesamenu.c32"`
+        cp ${VESAMENU} ${WORKDIR}/ISOTMP/isolinux/
+      elif [ "${UBUVERSION}" -gt 14 ] ; then
+        # Copy the c32 files into isolinux ##### TEST
+        c32files=`find /usr/lib/ -name "*.c32" | grep "/bios/"`
+        for c in ${c32files} ; do
+          cp ${c} ${WORKDIR}/ISOTMP/isolinux/
+        done
       fi
-    else # unsuccessful downloads
-      log_msg "something was wrong with downloading deb files,"
-      log_msg "no new deb files being copied into pool so as to maintain compatibility"
-      pwd >>${WORKDIR}/bodhibuilder.log
-    fi
+      # setup isolinux for the livecd
+      sed -e 's/__DISTNAME__/'"${DISTNAME}"'/g' /etc/bodhibuilder/isolinux/isolinux.cfg.vesamenu > ${WORKDIR}/ISOTMP/isolinux/isolinux.cfg
+      cp /etc/bodhibuilder/isolinux/splash.png ${WORKDIR}/ISOTMP/isolinux/splash.png
+  else # custom isolinux
+      log_msg "Copying your custom isolinux setup to the live system"
+      cp /etc/bodhibuilder/customisolinux/* ${WORKDIR}/ISOTMP/isolinux/ &> /dev/null
+  fi
 
-    # Creating a repository for the Ubiquity install
-    #  Note: in order for this to work correctly, the source system
-    #        must be completely upgraded, as in 'apt-get dist-upgrade'
-    log_msg "Creating a Packages.gz repository for the Ubiquity install"
-    # kamwoods - "dists" dir not being created in ISOTMP
-    if [ -e "${WORKDIR}/ISOTMP/dists" ] ; then
-      rm -f ${WORKDIR}/ISOTMP/dists/Packages.gz | ${tee_log}
-    ##~ else
-      ##~ mkdir ${WORKDIR}/ISOTMP/dists
-    fi
-    if [ "${ARCH}" = "amd64" ] ; then
-      log_msg "Creating ${WORKDIR}/ISOTMP/dists/Packages.gz"
-      ##~ cd ${WORKDIR}/ISOTMP/
-      cd ${WORKDIR}/ISOTMP/dists/
-      ##~ dpkg-scanpackages pool /dev/null 2>>${WORKDIR}/bodhibuilder.log | gzip -9c > ./dists/Packages.gz
-      dpkg-scanpackages pool /dev/null 2>>${WORKDIR}/bodhibuilder.log | gzip -9c > ./Packages.gz
-      cd -
-    else
-      log_msg "32-bit OS"
-      log_msg "not creating ${WORKDIR}/ISOTMP/dists/Packages.gz"
-    fi
+  log_msg "Based on the ARCH of the system, setting the README.diskdefines file"
 
-    #copy any preseed files
-    log_msg "Copying any preseed files"
-    cp /etc/bodhibuilder/preseed/* ${WORKDIR}/ISOTMP/preseed/
-
-    #BOOT Type is isolinux
-    log_msg "Copying memtest86+ for the live system"
-    cp /boot/memtest86+.bin ${WORKDIR}/ISOTMP/install/memtest
-
-    # BB EFI BOOT
-    # Customize file '/etc/bodhibuilder/isolinux/isolinux.cfg.vesamenu' to point to vmlinuz.efi
-
-    ## Just make it vmlinuz.efi:
-    # (Reason to do this -- /etc/bodhibuilder/uefi/boot/grub/grub.cfg file points to vmlinuz.efi,
-    #  as does /etc/bodhibuilder/isolinux/isolinux.cfg.vesamenu, by default. So far, vmlinuz.efi
-    #  has not hurt anything even if it's not a remaster in a UEFI booted system.)
-    # Forget the above stuff, and have isolinux just point to vmlinuz.efi like this:
-    log_msg "Ensuring isolinux.cfg.vesamenu is UEFI bootable (vmlinuz.efi)"
-    sed -i 's/vmlinuz$/vmlinuz\.efi/g' /etc/bodhibuilder/isolinux/isolinux.cfg.vesamenu
-
-
-    # check and see if they have a custom isolinux already setup. eg. they copied over
-    # the isolinux folder from their original livecd or made a custom one for their distro
-    # and get files isohdpfx.bin & isolinux.bin
-    if [ ! -f /etc/bodhibuilder/customisolinux/isolinux.cfg ] ; then # no custom isolinux (bb default)
-        log_msg "Creating isolinux setup for the live system"
-        find /usr/lib/ -name 'isohdpfx.bin' -exec cp -f {} ${WORKDIR}/ISOTMP/isolinux/ \;
-        find /usr/lib/ -name 'isolinux.bin' -exec cp -f {} ${WORKDIR}/ISOTMP/isolinux/ \;
-        #find fix for vesamenu.32 provided by Krasimir S. Stefanov <lokiisyourmaster@gmail.com>
-        if [ "${UBUVERSION}" -le 14 ] ; then
-          VESAMENU=`find /usr/lib/ -name "vesamenu.c32" | grep "syslinux/vesamenu.c32"`
-          cp ${VESAMENU} ${WORKDIR}/ISOTMP/isolinux/
-        elif [ "${UBUVERSION}" -gt 14 ] ; then
-          # Copy the c32 files into isolinux ##### TEST
-          c32files=`find /usr/lib/ -name "*.c32" | grep "/bios/"`
-          for c in ${c32files} ; do
-            cp ${c} ${WORKDIR}/ISOTMP/isolinux/
-          done
-        fi
-        # setup isolinux for the livecd
-        sed -e 's/__DISTNAME__/'"${DISTNAME}"'/g' /etc/bodhibuilder/isolinux/isolinux.cfg.vesamenu > ${WORKDIR}/ISOTMP/isolinux/isolinux.cfg
-        cp /etc/bodhibuilder/isolinux/splash.png ${WORKDIR}/ISOTMP/isolinux/splash.png
-    else # custom isolinux
-        log_msg "Copying your custom isolinux setup to the live system"
-        cp /etc/bodhibuilder/customisolinux/* ${WORKDIR}/ISOTMP/isolinux/ &> /dev/null
-    fi
-
-    log_msg "Based on the ARCH of the system, setting the README.diskdefines file"
-
-    cat > ${WORKDIR}/ISOTMP/README.diskdefines <<FOO
+  cat > ${WORKDIR}/ISOTMP/README.diskdefines <<FOO
 #define DISKNAME  ${LIVECDLABEL}
 #define TYPE  binary
 #define TYPEbinary  1
@@ -1019,116 +1038,121 @@ log_msg "Renaming Distro to ${LIVECDLABEL}"
 #define TOTALNUM  0
 #define TOTALNUM0  1
 FOO
-    cp ${WORKDIR}/ISOTMP/README.diskdefines ${WORKDIR}/ISOTMP/casper/README.diskdefines
+  cp ${WORKDIR}/ISOTMP/README.diskdefines ${WORKDIR}/ISOTMP/casper/README.diskdefines
 
-    sleep 1
+  sleep 1
 
-    # Step 4 - Make the filesystem.manifest and filesystem.manifest-desktop
-    log_msg "Creating filesystem.manifest and filesystem.manifest-desktop"
-    # May need to make change below on 'dpkg-query' line because 'version' var is not assigned earlier
-    #~ dpkg-query -W --showformat='${Package} ${Version}\n' > ${WORKDIR}/ISOTMP/casper/filesystem.manifest
-    cp ${WORKDIR}/ISOTMP/casper/filesystem.manifest ${WORKDIR}/ISOTMP/casper/filesystem.manifest-desktop
+  # Step 4 - Make the filesystem.manifest and filesystem.manifest-desktop
+  log_msg "Creating filesystem.manifest and filesystem.manifest-desktop"
+  # May need to make change below on 'dpkg-query' line because 'version' var is not assigned earlier
+  #~ dpkg-query -W --showformat='${Package} ${Version}\n' > ${WORKDIR}/ISOTMP/casper/filesystem.manifest
+  cp ${WORKDIR}/ISOTMP/casper/filesystem.manifest ${WORKDIR}/ISOTMP/casper/filesystem.manifest-desktop
 
-    # Suggested by lkjoel from Ubuntu Forums - Joel Leclerc to remove the frontend so the Install menu item is not on the installed system
-    sed -i '/ubiquity-frontend/d' ${WORKDIR}/ISOTMP/casper/filesystem.manifest-desktop
+  # Suggested by lkjoel from Ubuntu Forums - Joel Leclerc to remove the frontend so the Install menu item is not on the installed system
+  sed -i '/ubiquity-frontend/d' ${WORKDIR}/ISOTMP/casper/filesystem.manifest-desktop
 
-    sleep 1
-
-
-    # Step 5 - Prepare casper.conf depending on whether this is a backup or dist
-
-    if [ "${OPT1}" = "backup" ] ; then
-        BACKUPEXCLUDES=""
-        log_msg "Excluding folders from the backup that will cause issues"
-
-        for bi in `ls /home`; do
-            if [ -d /home/${bi}/.gvfs ] ; then
-                BACKUPEXCLUDES="${BACKUPEXCLUDES} /home/${bi}/.gvfs "
-            fi
-            if [ -d /home/${bi}/.cache ] ; then
-                BACKUPEXCLUDES="${BACKUPEXCLUDES} /home/${bi}/.cache "
-            fi
-            if [ -d /home/${bi}/.thumbnails ] ; then
-                BACKUPEXCLUDES="${BACKUPEXCLUDES} /home/${bi}/.thumbnails "
-            fi
-            if [ -d /home/${bi}/.local/share/gvfs-metadata ] ; then
-                BACKUPEXCLUDES="${BACKUPEXCLUDES} /home/${bi}/.local/share/gvfs-metadata "
-            fi
-            if [ -d /home/${bi}/.local/gvfs-metadata ] ; then
-                BACKUPEXCLUDES="${BACKUPEXCLUDES} /home/${bi}/.local/gvfs-metadata "
-            fi
-            if [ -d /home/${bi}/.local/share/Trash ] ; then
-                BACKUPEXCLUDES="${BACKUPEXCLUDES} /home/${bi}/.local/share/Trash "
-            fi
-        done
-
-        LIVEUSER="`who -u | grep -v root | cut -d " " -f1| uniq`"
-        if [ "`who -u | grep -v root | cut -d " " -f1| uniq | wc -l`" != "1" ] ; then
-            LIVEUSER="`grep '^[^:]*:[^:]*:1000:' /etc/passwd | awk -F ":" '{ print $1 }'`"
-        fi
-
-        if [ "${LIVEUSER}" = "" ] ; then
-            log_msg "Can't determine which user to use. Please logoff all users except for your main user and try again. Exiting."
-            exit 1
-        fi
-
-        LIVEHOME=`grep ${LIVEUSER} /etc/passwd | awk -F ":" '{print $6}'`
-        if [ "${BACKUPSHOWINSTALL}" = "1" ] ; then
-            # copy the install icon to the sudo users desktop
-            log_msg "Copying the ubiquity install icon to the desktop of ${LIVEUSER}"
-            if [ -e /etc/bodhibuilder/ubiquity/ubiquity.desktop ] ; then
-              UBIQUITYDESKTOP="/etc/bodhibuilder/ubiquity/ubiquity.desktop"
-            fi
-            if [ ! "${UBIQUITYDESKTOP}" ] ; then
-              UBIQUITYDESKTOP=`find /usr/share/applications -name 'ubiquity*.desktop' | head -1`
-              if [ ! "${UBIQUITYDESKTOP}" ] ; then
-                  UBIQUITYDESKTOP=`find /usr -name 'ubiquity*.desktop' | head -1`
-              fi
-            fi
-            if [ "${UBIQUITYDESKTOP}" ] ; then
-                install -d -o ${LIVEUSER} -g ${LIVEUSER} /${LIVEHOME}/Desktop &> /dev/null
-                install -D -o ${LIVEUSER} -g ${LIVEUSER} ${UBIQUITYDESKTOP} /${LIVEHOME}/Desktop/ &> /dev/null
-                #~ sed -i "s/RELEASE/${LIVECDLABEL}/" "/${LIVEHOME}/Desktop/`basename ${UBIQUITYDESKTOP}`" &> /dev/null
-                sed -i "s/_LIVE_CD_LABEL_/${LIVECDLABEL}/" "/${LIVEHOME}/Desktop/`basename ${UBIQUITYDESKTOP}`" &> /dev/null
-                chmod +x "/${LIVEHOME}/Desktop/`basename ${UBIQUITYDESKTOP}`"
-                sudo -i -u ${LIVEUSER} dbus-run-session -- gio set "/${LIVEHOME}/Desktop/`basename ${UBIQUITYDESKTOP}`" metadata::trusted yes
-                echo "ubiquity command:  `grep -i exec= ${UBIQUITYDESKTOP}`" >>${WORKDIR}/bodhibuilder.log
-            fi
-        fi
-    elif [ "${OPT1}" = "dist" ] ; then
-        # copy over bb's ubiquity.desktop to the host system with the custom name 'Install ${LIVECDLABEL}'
-        log_msg "copying over bodhibuilder's ubiquity.desktop to the host system with the custom name 'Install ${LIVECDLABEL}'"
-        echo "- All available ubiquity files in /usr/share/applications/"
-        ls -l /usr/share/applications/UBIQUITY* >>${WORKDIR}/bodhibuilder.log
-        ls -l /usr/share/applications/ubiquity* >>${WORKDIR}/bodhibuilder.log
-        if [ ! -e /usr/share/applications/UBIQUITY.desktop_ORIG ] ; then
-          echo "- rename original ubiquity.desktop to UBIQUITY.desktop_ORIG" >>${WORKDIR}/bodhibuilder.log
-          find /usr/share/applications -name 'ubiquity.desktop' -execdir mv -v '{}' UBIQUITY.desktop_ORIG \; >>${WORKDIR}/bodhibuilder.log
-          chmod 644 /usr/share/applications/UBIQUITY.desktop_ORIG
-        fi
-        if [ -e /usr/share/applications/UBIQUITY.desktop ] ; then
-          yes | rm -vrf /usr/share/applications/UBIQUITY.desktop >>${WORKDIR}/bodhibuilder.log
-        fi
-        echo "- copy custom ubiquity.desktop into applications dir" >>${WORKDIR}/bodhibuilder.log
-        cp -vf /etc/bodhibuilder/ubiquity/ubiquity.desktop /usr/share/applications/ubiquity.desktop >>${WORKDIR}/bodhibuilder.log
-        echo "- set custom name to 'Install ${LIVECDLABEL}'" >>${WORKDIR}/bodhibuilder.log
-        sed -i "s/_LIVE_CD_LABEL_/${LIVECDLABEL}/" /usr/share/applications/ubiquity.desktop &> /dev/null
-    fi # end $OPT1 = backup or dist
+  sleep 1
 
 
-    # copy the desktop install icon into the icons dir
-    if [ -e /usr/share/icons/bbinstall.png ] ; then
-      if [ ! -e /usr/share/icons/bbinstall_previous.png ] ; then
-        cp -f /usr/share/icons/bbinstall.png /usr/share/icons/bbinstall_previous.png
+  # Step 5 - Prepare casper.conf depending on whether this is a backup or dist
+
+  if [ "${OPT1}" = "backup" ] ; then
+      BACKUPEXCLUDES=""
+      log_msg "Excluding folders from the backup that will cause issues"
+
+      for bi in `ls /home`; do
+          if [ -d /home/${bi}/.gvfs ] ; then
+              BACKUPEXCLUDES="${BACKUPEXCLUDES} /home/${bi}/.gvfs "
+          fi
+          if [ -d /home/${bi}/.cache ] ; then
+              BACKUPEXCLUDES="${BACKUPEXCLUDES} /home/${bi}/.cache "
+          fi
+          if [ -d /home/${bi}/.thumbnails ] ; then
+              BACKUPEXCLUDES="${BACKUPEXCLUDES} /home/${bi}/.thumbnails "
+          fi
+          if [ -d /home/${bi}/.local/share/gvfs-metadata ] ; then
+              BACKUPEXCLUDES="${BACKUPEXCLUDES} /home/${bi}/.local/share/gvfs-metadata "
+          fi
+          if [ -d /home/${bi}/.local/gvfs-metadata ] ; then
+              BACKUPEXCLUDES="${BACKUPEXCLUDES} /home/${bi}/.local/gvfs-metadata "
+          fi
+          if [ -d /home/${bi}/.local/share/Trash ] ; then
+              BACKUPEXCLUDES="${BACKUPEXCLUDES} /home/${bi}/.local/share/Trash "
+          fi
+      done
+
+      LIVEUSER="`who -u | grep -v root | cut -d " " -f1| uniq`"
+      if [ "`who -u | grep -v root | cut -d " " -f1| uniq | wc -l`" != "1" ] ; then
+          LIVEUSER="`grep '^[^:]*:[^:]*:1000:' /etc/passwd | awk -F ":" '{ print $1 }'`"
       fi
-    fi
-    echo "- copy install icon into icons dir" >>${WORKDIR}/bodhibuilder.log
-    cp -vf /etc/bodhibuilder/ubiquity/bbinstall.png /usr/share/icons/bbinstall.png
+
+      if [ "${LIVEUSER}" = "" ] ; then
+          log_msg "Can't determine which user to use. Please logoff all users except for your main user and try again. Exiting."
+          exit 1
+      fi
+
+      LIVEHOME=`grep ${LIVEUSER} /etc/passwd | awk -F ":" '{print $6}'`
+      if [ "${BACKUPSHOWINSTALL}" = "1" ] ; then
+          # copy the install icon to the sudo users desktop
+          log_msg "Copying the ubiquity install icon to the desktop of ${LIVEUSER}"
+          if [ -e /etc/bodhibuilder/ubiquity/ubiquity.desktop ] ; then
+            UBIQUITYDESKTOP="/etc/bodhibuilder/ubiquity/ubiquity.desktop"
+          fi
+          if [ ! "${UBIQUITYDESKTOP}" ] ; then
+            UBIQUITYDESKTOP=`find /usr/share/applications -name 'ubiquity*.desktop' | head -1`
+            if [ ! "${UBIQUITYDESKTOP}" ] ; then
+                UBIQUITYDESKTOP=`find /usr -name 'ubiquity*.desktop' | head -1`
+            fi
+          fi
+          if [ "${UBIQUITYDESKTOP}" ] ; then
+              install -d -o ${LIVEUSER} -g ${LIVEUSER} /${LIVEHOME}/Desktop &> /dev/null
+              install -D -o ${LIVEUSER} -g ${LIVEUSER} ${UBIQUITYDESKTOP} /${LIVEHOME}/Desktop/ &> /dev/null
+              sed -i "s/RELEASE/${LIVECDLABEL}/" "/${LIVEHOME}/Desktop/`basename ${UBIQUITYDESKTOP}`" &> /dev/null
+              #~ sed -i "s/_LIVE_CD_LABEL_/${LIVECDLABEL}/" "/${LIVEHOME}/Desktop/`basename ${UBIQUITYDESKTOP}`" &> /dev/null
+              chmod +x "/${LIVEHOME}/Desktop/`basename ${UBIQUITYDESKTOP}`"
+              # set ubiquity.desktop as trusted
+              sudo -i -u ${LIVEUSER} dbus-run-session -- gio set "/${LIVEHOME}/Desktop/`basename ${UBIQUITYDESKTOP}`" metadata::trusted yes
+              echo "ubiquity command:  `grep -i exec= ${UBIQUITYDESKTOP}`" >>${WORKDIR}/bodhibuilder.log
+          fi
+      fi
+  elif [ "${OPT1}" = "dist" ] ; then
+      # copy over bb's ubiquity.desktop to the host system with the custom name 'Install ${LIVECDLABEL}'
+      log_msg "copying over bodhibuilder's ubiquity.desktop to the host system with the custom name 'Install ${LIVECDLABEL}'"
+      log_msg "- All available ubiquity files in /usr/share/applications/"
+      ls -l /usr/share/applications/UBIQUITY* >>${WORKDIR}/bodhibuilder.log
+      ls -l /usr/share/applications/ubiquity* >>${WORKDIR}/bodhibuilder.log
+      #~ if [ ! -e /usr/share/applications/UBIQUITY.desktop_ORIG ] ; then
+        log_msg "- rename original ubiquity.desktop to ubiquity.desktop_ORIG"
+        find /usr/share/applications -name 'ubiquity.desktop' -execdir mv -v '{}' ubiquity.desktop_ORIG \; >>${WORKDIR}/bodhibuilder.log
+        chmod 644 /usr/share/applications/ubiquity.desktop_ORIG
+      #~ fi
+      #~ if [ -e /usr/share/applications/UBIQUITY.desktop ] ; then
+        #~ yes | rm -vrf /usr/share/applications/UBIQUITY.desktop >>${WORKDIR}/bodhibuilder.log
+      #~ fi
+      # remove any UBIQUITY that's all CAPS
+      if [ -e /usr/share/applications/UBIQUITY.desktop* ] ; then
+        yes | rm -vf /usr/share/applications/UBIQUITY.desktop* | ${tee_log}
+      fi
+      echo "- copy custom ubiquity.desktop into applications dir" >>${WORKDIR}/bodhibuilder.log
+      cp -vf /etc/bodhibuilder/ubiquity/ubiquity.desktop /usr/share/applications/ubiquity.desktop >>${WORKDIR}/bodhibuilder.log
+      echo "- set custom name to 'Install ${LIVECDLABEL}'" >>${WORKDIR}/bodhibuilder.log
+      sed -i "s/_LIVE_CD_LABEL_/${LIVECDLABEL}/" /usr/share/applications/ubiquity.desktop &> /dev/null
+  fi # end $OPT1 = backup or dist
 
 
-    log_msg "Creating the casper.conf file."
-    # Added FLAVOUR= as the new casper live boot will make it the first word from the Live CD Name if FLAVOUR is not set
-    cat > /etc/casper.conf <<FOO
+  # copy the desktop install icon into the icons dir
+  #~ if [ -e /usr/share/icons/bbinstall.png ] ; then
+    #~ if [ ! -e /usr/share/icons/bbinstall_previous.png ] ; then
+      #~ cp -f /usr/share/icons/bbinstall.png /usr/share/icons/bbinstall_previous.png
+    #~ fi
+  #~ fi
+  echo "- copy install icon into icons dir" >>${WORKDIR}/bodhibuilder.log
+  cp -vf /etc/bodhibuilder/ubiquity/bbinstall.png /usr/share/icons/bbinstall.png
+
+
+  log_msg "Creating the casper.conf file."
+  # Added FLAVOUR= as the new casper live boot will make it the first word from the Live CD Name if FLAVOUR is not set
+  cat > /etc/casper.conf <<FOO
 # This file should go in /etc/casper.conf
 # Supported variables are:
 # USERNAME, USERFULLNAME, HOST, BUILD_SYSTEM
@@ -1139,277 +1163,287 @@ export HOST="${LIVEUSER}"
 export BUILD_SYSTEM="Ubuntu"
 export FLAVOUR="${LIVEUSER}"
 FOO
-    cp /etc/casper.conf ${WORKDIR}/dummysys/etc/
+  cp /etc/casper.conf ${WORKDIR}/dummysys/etc/
 
-    sleep 1
-
-
-    # if the mode is dist then re-number the uid's for any user with a uid greater than 1000
-    # and make the passwdrestore file so the uid's are restored before the script finishes
-    # if this is not done, the livecd user will not be created properly
-    log_msg "Checking and setting user-setup-apply for the live system"
-
-    case ${OPT1} in
-      dist )
-        # make sure user-setup-apply is present in case backup mode was last used
-        if [ -f /usr/lib/ubiquity/user-setup/user-setup-apply.orig ] ; then
-            cp /usr/lib/ubiquity/user-setup/user-setup-apply.orig /usr/lib/ubiquity/user-setup/user-setup-apply
-        fi
-      ;;
-      * )
-        # since this is backup mode, prevent user-setup-apply from running during install
-        if [ ! -f /usr/lib/ubiquity/user-setup/user-setup-apply.orig ] ; then
-            mv /usr/lib/ubiquity/user-setup/user-setup-apply /usr/lib/ubiquity/user-setup/user-setup-apply.orig
-        fi
-        echo "exit 0"> /usr/lib/ubiquity/user-setup/user-setup-apply
-        chmod 755 /usr/lib/ubiquity/user-setup/user-setup-apply
-      ;;
-    esac
+  sleep 1
 
 
-    sleep 1
+  # if the mode is dist then re-number the uid's for any user with a uid greater than 1000
+  # and make the passwdrestore file so the uid's are restored before the script finishes
+  # if this is not done, the livecd user will not be created properly
+  log_msg "Checking and setting user-setup-apply for the live system"
 
-
-    # Set the desired apt-setup commands for ubiquity
-    log_msg "Setting up casper and ubiquity options for ${OPT1} mode"
-    
-    log_msg "Tweaking apt-setup"
-    
-    # create a backup of the original apt-setup
-    if [ ! -f "/usr/share/ubiquity/apt-setup.0RIG" ] ; then
-        cp -f /usr/share/ubiquity/apt-setup /usr/share/ubiquity/apt-setup.0RIG
-    fi
-    rm -f /usr/share/ubiquity/apt-setup &> /dev/null
-    #~ cp -f /etc/bodhibuilder/ubiquity/apt-setup.bb /usr/share/ubiquity/
-    cp -f /etc/bodhibuilder/ubiquity/apt-setup.* /usr/share/ubiquity/
-    cp -f /etc/bodhibuilder/ubiquity/apt-setup.bb /usr/share/ubiquity/apt-setup # pre-configured apt-setup for bodhibuilder
-    chmod 755 /usr/share/ubiquity/apt-setup
-
-
-    # make a new initial ramdisk including the casper scripts
-    log_msg "Creating a new initial ramdisk for the live system"
-    mkinitramfs -o /boot/initrd.img-`uname -r` `uname -r`
-
-
-    log_msg "Copying your kernel and initrd for the livecd"
-    ## Just make it vmlinuz.efi:
-    #   (As stated earlier, so far, vmlinuz.efi has not hurt anything 
-    #    even if it's not a remaster in a UEFI booted system.)
-    log_msg "Creating casper/vmlinuz.efi"
-    cp /boot/vmlinuz-`uname -r` ${WORKDIR}/ISOTMP/casper/vmlinuz.efi
-
-
-    # Copy initrd into casper
-    cp -v /boot/initrd.img-`uname -r` ${WORKDIR}/ISOTMP/casper/initrd.lz
-
-
-    ## Process to create initrd.lz from initrd.img... in casper
-    #    Provisional: DO NOT REMOVE UNLESS VERY SURE
-    # if /boot/initrd.img is in gzip format, some version
-    # of this will have to be implemented
-    #~ log_msg "Copying initrd.img to casper/initrd.gz"
-    #~ cp /boot/initrd.img-`uname -r` ${WORKDIR}/ISOTMP/casper/initrd.gz
-    #~ gunzip ${WORKDIR}/ISOTMP/casper/initrd.gz #changes initrd.gz to initrd
-    #~ mkdir ${WORKDIR}/ISOTMP/casper/tmpinitrd
-    #~ currdir=${PWD}
-    #~ cd ${WORKDIR}/ISOTMP/casper/tmpinitrd
-    #~ log_msg "Unpacking initrd.gz"
-    #~ cpio -id < ../initrd
-    #~ sleep 1
-    #~ #create the initrd.lz
-    #~ log_msg "Repacking and compressing as initrd.lz"
-    #~ find . | cpio --quiet --dereference -o -H newc | lzma -7 > ../initrd.lz
-    #~ cd ${WORKDIR}/ISOTMP/casper
-    #~ log_msg "Cleaning up ${PWD}"
-    #~ if [ -d ./tmpinitrd ] ; then #remove unnecessary leftovers
-        #~ rm -r ./tmpinitrd
-    #~ fi
-    #~ if [ -f ./initrd ] ; then #remove unnecessary leftovers
-        #~ rm ./initrd
-    #~ fi
-    #~ cd ${currdir} #cd back to original dir & continue remastering
-    #~ log_msg "Working in ${PWD}"
-
-
-    #exit if missing vmlinuz.efi
-    if [ ! -f ${WORKDIR}/ISOTMP/casper/vmlinuz.efi ] ; then
-        log_msg "vmlinuz.efi not found in casper. Exiting"
-        exit 1
-    fi
-
-    #exit if missing... initrd.lz
-    if [ ! -f ${WORKDIR}/ISOTMP/casper/initrd.lz ] ; then
-        log_msg "Missing valid initial ramdisk. Exiting"
-        exit 1
-    fi
-
-
-    # Step 6 - Make filesystem.squashfs
-
-    if [ -f ${WORKDIR}/ISOTMP/casper/filesystem.squashfs ] ; then
-        rm -f ${WORKDIR}/ISOTMP/casper/filesystem.squashfs &> /dev/null
-    fi
-
-    log_msg "Creating filesystem.squashfs  ...  this will take a while so please be patient"
-
-    REALFOLDERS=""
-
-    # add folders to mksquashfs
-    for d in `ls -d ${WORKDIR}/dummysys/*`; do
-        REALFOLDERS="${REALFOLDERS} ${d}"
-    done
-
-
-    # set some folders to add or exclude from mksquashfs
-    case ${OPT1} in
-      backup )
-        # add folders to mksquashfs command
-        for d in `ls / | grep -v etc | grep -v run | grep -v tmp | grep -v sys | grep -v var | grep -v dev | grep -v media | grep -v mnt | grep -v lost+found | grep -v proc`; do
-            REALFOLDERS="${REALFOLDERS} /${d}"
-        done
-      ;;
-
-      dist )
-        # add folders to mksquashfs command
-        for d in `ls / | grep -v etc | grep -v run | grep -v tmp | grep -v sys | grep -v var | grep -v dev | grep -v media | grep -v mnt | grep -v lost+found | grep -v proc | grep -v home`; do
-            REALFOLDERS="${REALFOLDERS} /${d}"
-        done
-      ;;
-    esac
-
-
-    # Include only wanted icons & icon sets - multiple choices
-    if [ "${DISTICONS}" ] ; then
-      log_msg "Purging unwanted icon sets"
-      #~ EXCLUDEICONS=`ls -db /usr/share/icons/*`
-      EXCLUDEICONS=`find /usr/share/icons/* -maxdepth 0 -exec echo -n {} +` # all files in /usr/share/icons/
-      echo "      EXCLUDEICONS started as:" >>${WORKDIR}/bodhibuilder.log
-      echo " > ${EXCLUDEICONS}" >>${WORKDIR}/bodhibuilder.log
-      for i in ${DISTICONS} ; do
-        if [ -e "/usr/share/icons/${i}" ] ; then
-          echo "Removing ${i} from EXCLUDEICONS" >>${WORKDIR}/bodhibuilder.log
-          EXCLUDEICONS=`echo ${EXCLUDEICONS} | sed -e "s/ \/usr\/share\/icons\/${i} / /"`
-        fi
-      done
-      # EXCLUDEICONS is now all files in /usr/share/icons/ except those from DISTICONS
-      echo "      EXCLUDEICONS is now:" >>${WORKDIR}/bodhibuilder.log
-      echo " > ${EXCLUDEICONS}" >>${WORKDIR}/bodhibuilder.log
-    fi
-
-    # Include only wanted locales - multiple choices
-    if [ "${DISTLOCALE}" ] ; then
-      log_msg "Purging unwanted locales"
-      #~ EXCLUDELOCALES=`ls -db /usr/share/locale/*` # does not list directories only
-      EXCLUDELOCALES=`find /usr/share/locale/* -maxdepth 0 -type d -exec echo -n {} +` # lists all directories in /usr/share/locale/
-      echo "      EXCLUDELOCALES started as:" >>${WORKDIR}/bodhibuilder.log
-      echo " > ${EXCLUDELOCALES}" >>${WORKDIR}/bodhibuilder.log
-      for i in ${DISTLOCALE} ; do
-        if [ -d "/usr/share/locale/${i}" ] ; then
-          echo "Removing ${i} from EXCLUDELOCALES" >>${WORKDIR}/bodhibuilder.log
-          EXCLUDELOCALES=`echo ${EXCLUDELOCALES} | sed -e "s/ \/usr\/share\/locale\/${i} / /"`
-        fi
-      done
-      # EXCLUDELOCALES is now all files in /usr/share/locale/ except those from DISTLOCALE
-      echo "      EXCLUDELOCALES is now:" >>${WORKDIR}/bodhibuilder.log
-      echo " > ${EXCLUDELOCALES}" >>${WORKDIR}/bodhibuilder.log
-    fi
-
-
-    # set the mksquashfs command
-    #  2018-03-27 - added "/swapfile" to exclusions as per kamwoods
-    case ${OPT1} in
-      backup )
-        squashcmd="mksquashfs ${REALFOLDERS} ${WORKDIR}/ISOTMP/casper/filesystem.squashfs ${SQUASHFSOPTS} -e /root/.local/Trash /root/.thumbnails /root/.cache /root/.bash_history /root/.lesshst /root/.nano_history /boot/grub /usr/share/applications/bodhibuilder-gtk.desktop /swapfile ${BASEWORKDIR} ${EXCLUDEICONS} ${EXCLUDELOCALES} ${EXCLUDES} 2>>${WORKDIR}/bodhibuilder.log"
-      ;;
-      * )
-        squashcmd="mksquashfs ${REALFOLDERS} ${WORKDIR}/ISOTMP/casper/filesystem.squashfs ${SQUASHFSOPTS} -e /root/.local/Trash /root/.thumbnails /root/.dbus /root/.wget-hsts /root/.bash_history /root/.lesshst /root/.nano_history /boot/grub /usr/share/applications/bodhibuilder-gtk.desktop /swapfile ${BASEWORKDIR} ${EXCLUDEICONS} ${EXCLUDELOCALES} ${EXCLUDES} 2>>${WORKDIR}/bodhibuilder.log"
-      ;;
-    esac
-    echo "mksquashfs command:" >>${WORKDIR}/bodhibuilder.log
-    echo " > ${squashcmd}"  >>${WORKDIR}/bodhibuilder.log
-    # make the squashfs
-    eval ${squashcmd}
-
-
-    sleep 1
-
-
-    #add some stuff the log in case of problems so I can troubleshoot it easier
-    echo "Updating the bodhibuilder.log"
-    echo "------------------------------------------------------" >>${WORKDIR}/bodhibuilder.log
-    echo "Mount information" >>${WORKDIR}/bodhibuilder.log
-    mount >>${WORKDIR}/bodhibuilder.log
-    echo "------------------------------------------------------" >>${WORKDIR}/bodhibuilder.log
-    echo "Disk size information" >>${WORKDIR}/bodhibuilder.log
-    df -h >>${WORKDIR}/bodhibuilder.log
-    echo "------------------------------------------------------" >>${WORKDIR}/bodhibuilder.log
-    echo "Casper Script info" >>${WORKDIR}/bodhibuilder.log
-    ls -l /usr/share/initramfs-tools/scripts/casper-bottom/ >>${WORKDIR}/bodhibuilder.log
-    echo "------------------------------------------------------" >>${WORKDIR}/bodhibuilder.log
-    echo "/etc/bodhibuilder.conf info" >>${WORKDIR}/bodhibuilder.log
-    cat /etc/bodhibuilder.conf >>${WORKDIR}/bodhibuilder.log
-    echo "------------------------------------------------------" >>${WORKDIR}/bodhibuilder.log
-    echo "/etc/casper.conf info" >>${WORKDIR}/bodhibuilder.log
-    cat /etc/casper.conf >>${WORKDIR}/bodhibuilder.log
-    echo "------------------------------------------------------" >>${WORKDIR}/bodhibuilder.log
-    echo "/etc/passwd info" >>${WORKDIR}/bodhibuilder.log
-    cat ${WORKDIR}/dummysys/etc/passwd >>${WORKDIR}/bodhibuilder.log
-    echo "------------------------------------------------------" >>${WORKDIR}/bodhibuilder.log
-    echo "/etc/group info" >>${WORKDIR}/bodhibuilder.log
-    cat ${WORKDIR}/dummysys/etc/group >>${WORKDIR}/bodhibuilder.log
-    echo "------------------------------------------------------" >>${WORKDIR}/bodhibuilder.log
-    echo "/etc/X11/default-display-manager info" >>${WORKDIR}/bodhibuilder.log
-    cat ${WORKDIR}/dummysys/etc/X11/default-display-manager >>${WORKDIR}/bodhibuilder.log
-    echo "------------------------------------------------------" >>${WORKDIR}/bodhibuilder.log
-    echo "/etc/skel info" >>${WORKDIR}/bodhibuilder.log
-    find /etc/skel >>${WORKDIR}/bodhibuilder.log
-    echo "------------------------------------------------------" >>${WORKDIR}/bodhibuilder.log
-    echo "lsb-release info" >>${WORKDIR}/bodhibuilder.log
-    cat ${WORKDIR}/dummysys/etc/lsb-release >>${WORKDIR}/bodhibuilder.log
-    echo "------------------------------------------------------" >>${WORKDIR}/bodhibuilder.log
-    echo "bodhibuilder version info" >>${WORKDIR}/bodhibuilder.log
-    cat /etc/bodhibuilder/bodhibuilder.version >>${WORKDIR}/bodhibuilder.log
-    echo "------------------------------------------------------" >>${WORKDIR}/bodhibuilder.log
-    echo "ISOTMP info" >>${WORKDIR}/bodhibuilder.log
-    ls -Rl ${WORKDIR}/ISOTMP >>${WORKDIR}/bodhibuilder.log
-    echo "------------------------------------------------------" >>${WORKDIR}/bodhibuilder.log
-    echo "${WORKDIR}/tmpusers info" >>${WORKDIR}/bodhibuilder.log
-    cat ${WORKDIR}/tmpusers >>${WORKDIR}/bodhibuilder.log
-    echo "------------------------------------------------------" >>${WORKDIR}/bodhibuilder.log
-    echo "Command-line options = $@" >>${WORKDIR}/bodhibuilder.log
-    echo "------------------------------------------------------" >>${WORKDIR}/bodhibuilder.log
-
-
-    # cleanup the install icons as they aren't needed on the current system
-
-    if [ "${OPT1}" = "backup" ] ; then
-        log_msg "Cleaning up the install icon from the user desktops"
-        rm -rf /home/*/Desktop/ubiquity*.desktop &> /dev/null
-    fi
-
-
-    sleep 1
-
-
-    # add filesystem size for lucid
-    log_msg "Calculating the installed filesystem size for the installer"
-    unsquashfs -lls ${WORKDIR}/ISOTMP/casper/filesystem.squashfs | grep -v " inodes " | grep -v "unsquashfs:" | awk '{print $3}' | grep -v "," > /tmp/size.tmp
-    for i in `cat /tmp/size.tmp`; do a=$((${a}+${i})); done
-    echo ${a} > ${WORKDIR}/ISOTMP/casper/filesystem.size
-
-    # remove bodhibuilder-firstboot from the host system
-    log_msg "Removing bodhibuilder-firstboot from current system's startup"
-    update-rc.d -f bodhibuilder-firstboot remove
-    chmod 644 /etc/init.d/bodhibuilder-firstboot
-
-    # restore ubiquity.desktop
-    if  [ "${OPT1}" = "dist" ] ; then
-      if [ -e /usr/share/applications/UBIQUITY.desktop_ORIG ] ; then
-        log_msg "restoring ubiquity.desktop on the host system"
-        mv -f /usr/share/applications/ubiquity.desktop /usr/share/applications/ubiquity.desktop_BB
-        mv -f /usr/share/applications/UBIQUITY.desktop_ORIG /usr/share/applications/ubiquity.desktop
+  case ${OPT1} in
+    dist )
+      # make sure user-setup-apply is present in case backup mode was last used
+      if [ -f /usr/lib/ubiquity/user-setup/user-setup-apply.orig ] ; then
+          cp /usr/lib/ubiquity/user-setup/user-setup-apply.orig /usr/lib/ubiquity/user-setup/user-setup-apply
       fi
+    ;;
+    * )
+      # since this is backup mode, prevent user-setup-apply from running during install
+      if [ ! -f /usr/lib/ubiquity/user-setup/user-setup-apply.orig ] ; then
+          mv /usr/lib/ubiquity/user-setup/user-setup-apply /usr/lib/ubiquity/user-setup/user-setup-apply.orig
+      fi
+      echo "exit 0"> /usr/lib/ubiquity/user-setup/user-setup-apply
+      chmod 755 /usr/lib/ubiquity/user-setup/user-setup-apply
+    ;;
+  esac
+
+
+  sleep 1
+
+
+  # Set the desired apt-setup commands for ubiquity
+  log_msg "Setting up casper and ubiquity options for ${OPT1} mode"
+  
+  log_msg "Tweaking apt-setup"
+  
+  # create a backup of the original apt-setup
+  if [ ! -f "/usr/share/ubiquity/apt-setup.0RIG" ] ; then
+      cp -f /usr/share/ubiquity/apt-setup /usr/share/ubiquity/apt-setup.0RIG
+  fi
+  rm -f /usr/share/ubiquity/apt-setup &> /dev/null
+  #~ cp -f /etc/bodhibuilder/ubiquity/apt-setup.bb /usr/share/ubiquity/
+  cp -f /etc/bodhibuilder/ubiquity/apt-setup.* /usr/share/ubiquity/
+  cp -f /etc/bodhibuilder/ubiquity/apt-setup.bb /usr/share/ubiquity/apt-setup # pre-configured apt-setup for bodhibuilder
+  chmod 755 /usr/share/ubiquity/apt-setup
+
+
+  # make a new initial ramdisk including the casper scripts
+  log_msg "Creating a new initial ramdisk for the live system"
+  mkinitramfs -o /boot/initrd.img-`uname -r` `uname -r`
+
+
+  log_msg "Copying your kernel and initrd for the livecd"
+  ## Just make it vmlinuz.efi:
+  #   (As stated earlier, so far, vmlinuz.efi has not hurt anything 
+  #    even if it's not a remaster in a UEFI booted system.)
+  ##### not booting to vmlinuz.efi, just vmlinuz 8/19/2018
+  #~ log_msg "Creating casper/vmlinuz.efi"
+  #~ cp /boot/vmlinuz-`uname -r` ${WORKDIR}/ISOTMP/casper/vmlinuz.efi
+  log_msg "Creating casper/vmlinuz"
+  cp /boot/vmlinuz-`uname -r` ${WORKDIR}/ISOTMP/casper/vmlinuz
+
+
+  # Copy initrd into casper
+  cp -v /boot/initrd.img-`uname -r` ${WORKDIR}/ISOTMP/casper/initrd.lz
+
+
+  ## Process to create initrd.lz from initrd.img... in casper
+  #    Provisional: DO NOT REMOVE UNLESS VERY SURE
+  # if /boot/initrd.img is in gzip format, some version
+  # of this will have to be implemented
+  #~ log_msg "Copying initrd.img to casper/initrd.gz"
+  #~ cp /boot/initrd.img-`uname -r` ${WORKDIR}/ISOTMP/casper/initrd.gz
+  #~ gunzip ${WORKDIR}/ISOTMP/casper/initrd.gz #changes initrd.gz to initrd
+  #~ mkdir ${WORKDIR}/ISOTMP/casper/tmpinitrd
+  #~ currdir=${PWD}
+  #~ cd ${WORKDIR}/ISOTMP/casper/tmpinitrd
+  #~ log_msg "Unpacking initrd.gz"
+  #~ cpio -id < ../initrd
+  #~ sleep 1
+  #~ #create the initrd.lz
+  #~ log_msg "Repacking and compressing as initrd.lz"
+  #~ find . | cpio --quiet --dereference -o -H newc | lzma -7 > ../initrd.lz
+  #~ cd ${WORKDIR}/ISOTMP/casper
+  #~ log_msg "Cleaning up ${PWD}"
+  #~ if [ -d ./tmpinitrd ] ; then #remove unnecessary leftovers
+      #~ rm -r ./tmpinitrd
+  #~ fi
+  #~ if [ -f ./initrd ] ; then #remove unnecessary leftovers
+      #~ rm ./initrd
+  #~ fi
+  #~ cd ${currdir} #cd back to original dir & continue remastering
+  #~ log_msg "Working in ${PWD}"
+
+
+  ##### not booting to vmlinuz.efi, just vmlinuz 8/19/2018
+  #~ #exit if missing vmlinuz.efi
+  #~ if [ ! -f ${WORKDIR}/ISOTMP/casper/vmlinuz.efi ] ; then
+      #~ log_msg "vmlinuz.efi not found in casper. Exiting"
+      #~ exit 1
+  #~ fi
+  #exit if missing vmlinuz
+  if [ ! -f ${WORKDIR}/ISOTMP/casper/vmlinuz ] ; then
+      log_msg "vmlinuz not found in casper. Exiting"
+      exit 1
+  fi
+
+  #exit if missing... initrd.lz
+  if [ ! -f ${WORKDIR}/ISOTMP/casper/initrd.lz ] ; then
+      log_msg "Missing valid initial ramdisk. Exiting"
+      exit 1
+  fi
+
+
+  # Step 6 - Make filesystem.squashfs
+
+  if [ -f ${WORKDIR}/ISOTMP/casper/filesystem.squashfs ] ; then
+      rm -f ${WORKDIR}/ISOTMP/casper/filesystem.squashfs &> /dev/null
+  fi
+
+  log_msg "Creating filesystem.squashfs  ...  this will take a while so please be patient"
+
+  REALFOLDERS=""
+
+  # add folders to mksquashfs
+  for d in `ls -d ${WORKDIR}/dummysys/*`; do
+      REALFOLDERS="${REALFOLDERS} ${d}"
+  done
+
+
+  # set some folders to add or exclude from mksquashfs
+  case ${OPT1} in
+    backup )
+      # add folders to mksquashfs command
+      for d in `ls / | grep -v etc | grep -v run | grep -v tmp | grep -v sys | grep -v var | grep -v dev | grep -v media | grep -v mnt | grep -v lost+found | grep -v proc`; do
+          REALFOLDERS="${REALFOLDERS} /${d}"
+      done
+    ;;
+
+    dist )
+      # add folders to mksquashfs command
+      for d in `ls / | grep -v etc | grep -v run | grep -v tmp | grep -v sys | grep -v var | grep -v dev | grep -v media | grep -v mnt | grep -v lost+found | grep -v proc | grep -v home`; do
+          REALFOLDERS="${REALFOLDERS} /${d}"
+      done
+    ;;
+  esac
+
+
+  # Include only wanted icons & icon sets - multiple choices
+  if [ "${DISTICONS}" ] ; then
+    log_msg "Purging unwanted icon sets"
+    #~ EXCLUDEICONS=`ls -db /usr/share/icons/*`
+    EXCLUDEICONS=`find /usr/share/icons/* -maxdepth 0 -exec echo -n {} +` # all files in /usr/share/icons/
+    echo "      EXCLUDEICONS started as:" >>${WORKDIR}/bodhibuilder.log
+    echo " > ${EXCLUDEICONS}" >>${WORKDIR}/bodhibuilder.log
+    for i in ${DISTICONS} ; do
+      if [ -e "/usr/share/icons/${i}" ] ; then
+        echo "Removing ${i} from EXCLUDEICONS" >>${WORKDIR}/bodhibuilder.log
+        EXCLUDEICONS=`echo ${EXCLUDEICONS} | sed -e "s/ \/usr\/share\/icons\/${i} / /"`
+      fi
+    done
+    # EXCLUDEICONS is now all files in /usr/share/icons/ except those from DISTICONS
+    echo "      EXCLUDEICONS is now:" >>${WORKDIR}/bodhibuilder.log
+    echo " > ${EXCLUDEICONS}" >>${WORKDIR}/bodhibuilder.log
+  fi
+
+  # Include only wanted locales - multiple choices
+  if [ "${DISTLOCALE}" ] ; then
+    log_msg "Purging unwanted locales"
+    #~ EXCLUDELOCALES=`ls -db /usr/share/locale/*` # does not list directories only
+    EXCLUDELOCALES=`find /usr/share/locale/* -maxdepth 0 -type d -exec echo -n {} +` # lists all directories in /usr/share/locale/
+    echo "      EXCLUDELOCALES started as:" >>${WORKDIR}/bodhibuilder.log
+    echo " > ${EXCLUDELOCALES}" >>${WORKDIR}/bodhibuilder.log
+    for i in ${DISTLOCALE} ; do
+      if [ -d "/usr/share/locale/${i}" ] ; then
+        echo "Removing ${i} from EXCLUDELOCALES" >>${WORKDIR}/bodhibuilder.log
+        EXCLUDELOCALES=`echo ${EXCLUDELOCALES} | sed -e "s/ \/usr\/share\/locale\/${i} / /"`
+      fi
+    done
+    # EXCLUDELOCALES is now all files in /usr/share/locale/ except those from DISTLOCALE
+    echo "      EXCLUDELOCALES is now:" >>${WORKDIR}/bodhibuilder.log
+    echo " > ${EXCLUDELOCALES}" >>${WORKDIR}/bodhibuilder.log
+  fi
+
+
+  # set the mksquashfs command
+  #  2018-03-27 - added "/swapfile" to exclusions as per kamwoods
+  case ${OPT1} in
+    backup )
+      squashcmd="mksquashfs ${REALFOLDERS} ${WORKDIR}/ISOTMP/casper/filesystem.squashfs ${SQUASHFSOPTS} -e /root/.local/Trash /root/.thumbnails /root/.cache /root/.bash_history /root/.lesshst /root/.nano_history /boot/grub /usr/share/applications/bodhibuilder-gtk.desktop /swapfile ${BASEWORKDIR} ${EXCLUDEICONS} ${EXCLUDELOCALES} ${EXCLUDES} 2>>${WORKDIR}/bodhibuilder.log"
+    ;;
+    * )
+      squashcmd="mksquashfs ${REALFOLDERS} ${WORKDIR}/ISOTMP/casper/filesystem.squashfs ${SQUASHFSOPTS} -e /root/.local/Trash /root/.thumbnails /root/.dbus /root/.wget-hsts /root/.bash_history /root/.lesshst /root/.nano_history /boot/grub /usr/share/applications/bodhibuilder-gtk.desktop /swapfile ${BASEWORKDIR} ${EXCLUDEICONS} ${EXCLUDELOCALES} ${EXCLUDES} 2>>${WORKDIR}/bodhibuilder.log"
+    ;;
+  esac
+  echo "mksquashfs command:" >>${WORKDIR}/bodhibuilder.log
+  echo " > ${squashcmd}"  >>${WORKDIR}/bodhibuilder.log
+  log_msg "SQUASHFSOPTS  -->  ${SQUASHFSOPTS}"
+  # make the squashfs
+  eval ${squashcmd}
+
+
+  sleep 1
+
+
+  #add some stuff the log in case of problems so I can troubleshoot it easier
+  echo "Updating the bodhibuilder.log"
+  echo "------------------------------------------------------" >>${WORKDIR}/bodhibuilder.log
+  echo "Mount information" >>${WORKDIR}/bodhibuilder.log
+  mount >>${WORKDIR}/bodhibuilder.log
+  echo "------------------------------------------------------" >>${WORKDIR}/bodhibuilder.log
+  echo "Disk size information" >>${WORKDIR}/bodhibuilder.log
+  df -h >>${WORKDIR}/bodhibuilder.log
+  echo "------------------------------------------------------" >>${WORKDIR}/bodhibuilder.log
+  echo "Casper Script info" >>${WORKDIR}/bodhibuilder.log
+  ls -l /usr/share/initramfs-tools/scripts/casper-bottom/ >>${WORKDIR}/bodhibuilder.log
+  echo "------------------------------------------------------" >>${WORKDIR}/bodhibuilder.log
+  echo "/etc/bodhibuilder.conf info" >>${WORKDIR}/bodhibuilder.log
+  cat /etc/bodhibuilder.conf >>${WORKDIR}/bodhibuilder.log
+  echo "------------------------------------------------------" >>${WORKDIR}/bodhibuilder.log
+  echo "/etc/casper.conf info" >>${WORKDIR}/bodhibuilder.log
+  cat /etc/casper.conf >>${WORKDIR}/bodhibuilder.log
+  echo "------------------------------------------------------" >>${WORKDIR}/bodhibuilder.log
+  echo "/etc/passwd info" >>${WORKDIR}/bodhibuilder.log
+  cat ${WORKDIR}/dummysys/etc/passwd >>${WORKDIR}/bodhibuilder.log
+  echo "------------------------------------------------------" >>${WORKDIR}/bodhibuilder.log
+  echo "/etc/group info" >>${WORKDIR}/bodhibuilder.log
+  cat ${WORKDIR}/dummysys/etc/group >>${WORKDIR}/bodhibuilder.log
+  echo "------------------------------------------------------" >>${WORKDIR}/bodhibuilder.log
+  echo "/etc/X11/default-display-manager info" >>${WORKDIR}/bodhibuilder.log
+  cat ${WORKDIR}/dummysys/etc/X11/default-display-manager >>${WORKDIR}/bodhibuilder.log
+  echo "------------------------------------------------------" >>${WORKDIR}/bodhibuilder.log
+  echo "/etc/skel info" >>${WORKDIR}/bodhibuilder.log
+  find /etc/skel >>${WORKDIR}/bodhibuilder.log
+  echo "------------------------------------------------------" >>${WORKDIR}/bodhibuilder.log
+  echo "lsb-release info" >>${WORKDIR}/bodhibuilder.log
+  cat ${WORKDIR}/dummysys/etc/lsb-release >>${WORKDIR}/bodhibuilder.log
+  echo "------------------------------------------------------" >>${WORKDIR}/bodhibuilder.log
+  echo "bodhibuilder version info" >>${WORKDIR}/bodhibuilder.log
+  cat /etc/bodhibuilder/bodhibuilder.version >>${WORKDIR}/bodhibuilder.log
+  echo "------------------------------------------------------" >>${WORKDIR}/bodhibuilder.log
+  echo "ISOTMP info" >>${WORKDIR}/bodhibuilder.log
+  ls -Rl ${WORKDIR}/ISOTMP >>${WORKDIR}/bodhibuilder.log
+  echo "------------------------------------------------------" >>${WORKDIR}/bodhibuilder.log
+  echo "${WORKDIR}/tmpusers info" >>${WORKDIR}/bodhibuilder.log
+  cat ${WORKDIR}/tmpusers >>${WORKDIR}/bodhibuilder.log
+  echo "------------------------------------------------------" >>${WORKDIR}/bodhibuilder.log
+  echo "Command-line options = $@" >>${WORKDIR}/bodhibuilder.log
+  echo "------------------------------------------------------" >>${WORKDIR}/bodhibuilder.log
+
+
+  # cleanup the install icons as they aren't needed on the current system
+
+  if [ "${OPT1}" = "backup" ] ; then
+      log_msg "Cleaning up the install icon from the user desktops"
+      rm -rf /home/*/Desktop/ubiquity*.desktop &> /dev/null
+  fi
+
+
+  sleep 1
+
+
+  # add filesystem size for lucid
+  log_msg "Calculating the installed filesystem size for the installer"
+  unsquashfs -lls ${WORKDIR}/ISOTMP/casper/filesystem.squashfs | grep -v " inodes " | grep -v "unsquashfs:" | awk '{print $3}' | grep -v "," > /tmp/size.tmp
+  for i in `cat /tmp/size.tmp`; do a=$((${a}+${i})); done
+  echo ${a} > ${WORKDIR}/ISOTMP/casper/filesystem.size
+
+  # remove bodhibuilder-firstboot from the host system
+  log_msg "Removing bodhibuilder-firstboot from current system's startup"
+  update-rc.d -f bodhibuilder-firstboot remove
+  chmod 644 /etc/init.d/bodhibuilder-firstboot
+
+  # restore ubiquity.desktop
+  if  [ "${OPT1}" = "dist" ] ; then
+    if [ -e /usr/share/applications/ubiquity.desktop_ORIG ] ; then
+      log_msg "restoring ubiquity.desktop on the host system"
+      mv -f /usr/share/applications/ubiquity.desktop /usr/share/applications/ubiquity.desktop_BB
+      mv -f /usr/share/applications/ubiquity.desktop_ORIG /usr/share/applications/ubiquity.desktop
     fi
+  fi
 }
 ##### END function cdfs #####
 
@@ -1417,272 +1451,272 @@ FOO
 ##### FUNCTION iso #####
 iso (){
 
-    # If xorriso exists, use it to make the iso. It can be used to create a UEFI bootable iso via dd.
-    # Otherwise, make genisoimage primary because it supercedes mkisofs
-    CREATEISO="`which xorriso`"
+  # If xorriso exists, use it to make the iso. It can be used to create a UEFI bootable iso via dd.
+  # Otherwise, make genisoimage primary because it supercedes mkisofs
+  CREATEISO="`which xorriso`"
+  if [ "${CREATEISO}" = "" ] ; then
+    CREATEISO="`which genisoimage`"
     if [ "${CREATEISO}" = "" ] ; then
-      CREATEISO="`which genisoimage`"
-      if [ "${CREATEISO}" = "" ] ; then
-        CREATEISO="`which mkisofs`"
+      CREATEISO="`which mkisofs`"
+    fi
+  fi
+
+  case ${CREATEISO} in
+    *xorriso* )
+      ISOCMD="xorriso"
+    ;;
+    *genisoimage )
+      ISOCMD="genisoimage"
+    ;;
+    *mkisofs )
+      ISOCMD="mkisofs"
+    ;;
+  esac
+
+  # Feedback to the log about which will be used to create the ISO
+  log_msg "On first detection (this could change based on other parameters)  ---"
+  log_msg "   Found '${CREATEISO}'"
+  log_msg "   Currently planning to use '${ISOCMD}' to create the ISO."
+
+  # check to see if the cd filesystem exists
+  if [ ! -f "${WORKDIR}/ISOTMP/casper/filesystem.squashfs" ] ; then
+      log_msg "The filesystem.squashfs filesystem is missing.  Either there was a problem creating the compressed filesystem or you are trying to run sudo bodhibuilder dist iso before sudo bodhibuilder dist cdfs"
+      exit 1
+  fi
+
+  #checking the size of the compressed filesystem to ensure it meets the iso9660 spec for a single file"
+  ## Not worried about the squashfs size for xorriso because it doesn't care what size the iso will be
+  ## Although if genisoimage or mkisofs are being used they do care about the iso size <-sef>
+  case ${CREATEISO} in
+    *genisoimage|*mkisofs )
+      SQUASHFSSIZE=`ls -s ${WORKDIR}/ISOTMP/casper/filesystem.squashfs | awk -F " " '{print $1}'`
+      if [ "${SQUASHFSSIZE}" -gt "3999999" ] ; then
+          log_msg "The compressed filesystem is larger than genisoimage allows for a single file. You must try to reduce the amount of data you are backing up and try again."
+          exit 1
       fi
-    fi
+    ;;
+  esac
 
-    case ${CREATEISO} in
-      *xorriso* )
-        ISOCMD="xorriso"
-      ;;
-      *genisoimage )
-        ISOCMD="genisoimage"
-      ;;
-      *mkisofs )
+
+  #Step 6.5 - Make ISO compatible with UEFI Grub Boot. This needs to be here or else UEFI boot won't work.
+  log_msg "Making disk compatible with UEFI Grub Boot."
+
+  . ${WORKDIR}/dummysys/etc/lsb-release
+
+  touch ${WORKDIR}/ISOTMP/ubuntu
+
+  touch ${WORKDIR}/ISOTMP/.disk/base_installable
+  echo "full_cd/single" > ${WORKDIR}/ISOTMP/.disk/cd_type
+  # starting with 12.04 need to have correct ubuntu version or startup disk creator uses syslinux-legacy which won't work
+  echo ${DISKINFONAME} ${DISTRIB_RELEASE} - Release ${ARCH} > ${WORKDIR}/ISOTMP/.disk/info
+  echo ${LIVECDURL} > ${WORKDIR}/ISOTMP/.disk/release_notes_url
+
+
+  # Step 7 - Make md5sum.txt for the files on the livecd - this is used during the
+  # checking function of the livecd
+  log_msg "Creating md5sum.txt for the livecd/dvd"
+  cd ${WORKDIR}/ISOTMP && find . -type f -print0 | xargs -0 md5sum > md5sum.txt
+
+
+  #isolinux mode
+
+  # remove files that change and cause problems with checking the disk
+  sed -e '/isolinux/d' md5sum.txt > md5sum.txt.new
+  sed -e '/md5sum/d' md5sum.txt.new > md5sum.txt
+  rm -f md5sum.txt.new &> /dev/null
+
+  sleep 1
+
+  # Step 8 - Make the ISO file
+  log_msg "Creating ${CUSTOMISO} in ${WORKDIR}"
+
+
+  # if file isohdpfx.bin doesn't exist, don't use xorriso
+    if [ ! -f "${WORKDIR}/ISOTMP/isolinux/isohdpfx.bin" ] ; then
+      log_msg "File '${WORKDIR}/ISOTMP/isolinux/isohdpfx.bin' not found."
+      log_msg "Can't use xorriso."
+      CREATEISO="`which genisoimage`"
+      ISOCMD="genisoimage"
+      if [ ! "${CREATEISO}" ] ; then
+        CREATEISO="`which mkisofs`"
         ISOCMD="mkisofs"
-      ;;
-    esac
-
-    # Feedback to the log about which will be used to create the ISO
-    log_msg "On first detection (this could change based on other parameters)  ---"
-    log_msg "   Found '${CREATEISO}'"
-    log_msg "   Currently planning to use '${ISOCMD}' to create the ISO."
-
-    # check to see if the cd filesystem exists
-    if [ ! -f "${WORKDIR}/ISOTMP/casper/filesystem.squashfs" ] ; then
-        log_msg "The filesystem.squashfs filesystem is missing.  Either there was a problem creating the compressed filesystem or you are trying to run sudo bodhibuilder dist iso before sudo bodhibuilder dist cdfs"
-        exit 1
+      fi
+      case ${CREATEISO} in
+        *genisoimage|*mkisofs )
+          log_msg "   No longer using xorriso..."
+          log_msg "   Now using '${ISOCMD}' @ '${CREATEISO}' to create the ISO."
+        ;;
+      esac
     fi
 
-    #checking the size of the compressed filesystem to ensure it meets the iso9660 spec for a single file"
-    ## Not worried about the squashfs size for xorriso because it doesn't care what size the iso will be
-    ## Although if genisoimage or mkisofs are being used they do care about the iso size <-sef>
+  # set ISO creation command based on architecture
+  # and then create the ISO
+  isopass=0
+  until [ "${isopass}" -eq 1 ] ; do
+
+    # do xorriso, genisoimage, or mkisofs depending on which will work best:
     case ${CREATEISO} in
-      *genisoimage|*mkisofs )
+      *xorriso* ) # Possibly create ISO using /usr/bin/xorriso - must be 64-bit OS
+        isopass=1 # Use xorriso regardless of ${ARCH}
+      ;; # end xorriso case select
+         # if isopass=0, goes back to beginning of loop
+
+      *genisoimage|*mkisofs ) # Create ISO using /usr/bin/genisoimage
+
+        #checking the size of the compressed filesystem to ensure it meets the iso9660 spec for a single file"
+        ## Not worried about the squashfs size for xorriso because it doesn't care what size the iso will be
+        ##  xorriso can create an iso exceeding the 4Gb limit that genisoimage has
+        ## So if genisoimage or mkisofs are being used they do care about the iso size <-sef>
         SQUASHFSSIZE=`ls -s ${WORKDIR}/ISOTMP/casper/filesystem.squashfs | awk -F " " '{print $1}'`
         if [ "${SQUASHFSSIZE}" -gt "3999999" ] ; then
             log_msg "The compressed filesystem is larger than genisoimage allows for a single file. You must try to reduce the amount of data you are backing up and try again."
             exit 1
         fi
-      ;;
-    esac
 
-
-    #Step 6.5 - Make ISO compatible with UEFI Grub Boot. This needs to be here or else UEFI boot won't work.
-    log_msg "Making disk compatible with UEFI Grub Boot."
-
-    . ${WORKDIR}/dummysys/etc/lsb-release
-
-    touch ${WORKDIR}/ISOTMP/ubuntu
-
-    touch ${WORKDIR}/ISOTMP/.disk/base_installable
-    echo "full_cd/single" > ${WORKDIR}/ISOTMP/.disk/cd_type
-    # starting with 12.04 need to have correct ubuntu version or startup disk creator uses syslinux-legacy which won't work
-    echo ${DISKINFONAME} ${DISTRIB_RELEASE} - Release ${ARCH} > ${WORKDIR}/ISOTMP/.disk/info
-    echo ${LIVECDURL} > ${WORKDIR}/ISOTMP/.disk/release_notes_url
-
-
-    # Step 7 - Make md5sum.txt for the files on the livecd - this is used during the
-    # checking function of the livecd
-    log_msg "Creating md5sum.txt for the livecd/dvd"
-    cd ${WORKDIR}/ISOTMP && find . -type f -print0 | xargs -0 md5sum > md5sum.txt
-
-
-    #isolinux mode
-
-    # remove files that change and cause problems with checking the disk
-    sed -e '/isolinux/d' md5sum.txt > md5sum.txt.new
-    sed -e '/md5sum/d' md5sum.txt.new > md5sum.txt
-    rm -f md5sum.txt.new &> /dev/null
-
-    sleep 1
-
-    # Step 8 - Make the ISO file
-    log_msg "Creating ${CUSTOMISO} in ${WORKDIR}"
-
-
-    # if file isohdpfx.bin doesn't exist, don't use xorriso
-      if [ ! -f "${WORKDIR}/ISOTMP/isolinux/isohdpfx.bin" ] ; then
-        log_msg "File '${WORKDIR}/ISOTMP/isolinux/isohdpfx.bin' not found."
-        log_msg "Can't use xorriso."
-        CREATEISO="`which genisoimage`"
-        ISOCMD="genisoimage"
-        if [ ! "${CREATEISO}" ] ; then
-          CREATEISO="`which mkisofs`"
-          ISOCMD="mkisofs"
+        # log message
+        if [ "${ISOCMD}" = "genisoimage" ] ; then
+          log_msg "Using genisoimage to create ISO."
+        elif [ "${ISOCMD}" = "mkisofs" ] ; then
+          log_msg "Using mkisofs to create ISO."
         fi
-        case ${CREATEISO} in
-          *genisoimage|*mkisofs )
-            log_msg "   No longer using xorriso..."
-            log_msg "   Now using '${ISOCMD}' @ '${CREATEISO}' to create the ISO."
-          ;;
-        esac
-      fi
 
-    # set ISO creation command based on architecture
-    # and then create the ISO
-    isopass=0
-    until [ "${isopass}" -eq 1 ] ; do
+        # check architecture
+        if [ ! "${ARCH}" = "amd64" ] ; then
+          log_msg "This ISO may not be UEFI bootable. At this time, UEFI is only fully supported in 64-bit OS."
+        fi
 
-      # do xorriso, genisoimage, or mkisofs depending on which will work best:
-      case ${CREATEISO} in
-        *xorriso* ) # Possibly create ISO using /usr/bin/xorriso - must be 64-bit OS
-          isopass=1 # Use xorriso regardless of ${ARCH}
-        ;; # end xorriso case select
-           # if isopass=0, goes back to beginning of loop
+        isopass=1
+      ;; # end genisoimage|mkisofs case select
 
-        *genisoimage|*mkisofs ) # Create ISO using /usr/bin/genisoimage
-
-          #checking the size of the compressed filesystem to ensure it meets the iso9660 spec for a single file"
-          ## Not worried about the squashfs size for xorriso because it doesn't care what size the iso will be
-          ##  xorriso can create an iso exceeding the 4Gb limit that genisoimage has
-          ## So if genisoimage or mkisofs are being used they do care about the iso size <-sef>
-          SQUASHFSSIZE=`ls -s ${WORKDIR}/ISOTMP/casper/filesystem.squashfs | awk -F " " '{print $1}'`
-          if [ "${SQUASHFSSIZE}" -gt "3999999" ] ; then
-              log_msg "The compressed filesystem is larger than genisoimage allows for a single file. You must try to reduce the amount of data you are backing up and try again."
-              exit 1
-          fi
-
-          # log message
-          if [ "${ISOCMD}" = "genisoimage" ] ; then
-            log_msg "Using genisoimage to create ISO."
-          elif [ "${ISOCMD}" = "mkisofs" ] ; then
-            log_msg "Using mkisofs to create ISO."
-          fi
-
-          # check architecture
-          if [ ! "${ARCH}" = "amd64" ] ; then
-            log_msg "This ISO may not be UEFI bootable. At this time, UEFI is only fully supported in 64-bit OS."
-          fi
-
-          isopass=1
-        ;; # end genisoimage|mkisofs case select
-
-        * ) # none of the three ISO creation programs are found on OS
-          log_msg "ERROR: xorriso, genisoimage, or mkisofs programs not found;"
-          log_msg "because of this the iso was not created. Exiting"
-          exit 1
-        ;;
-      esac # end CREATEISO check
-    done # end isopass loop check
-
-
-    ## Now actually create the ISO
-    case ${CREATEISO} in
-        *xorriso* ) # 
-            # xorriso
-            #   - Can boot to ISO in either UEFI or non-UEFI mode when dd'd to a USB, CD or DVD
-            #   - Copy direct to CD or DVD using command:  sudo xorrecord dev=/dev/sr0 speed=12 fs=8m blank=as_needed -eject padsize=300k file.iso
-            #   - Copy direct to USB using command:  sudo dd if=file.iso of=/dev/sdX
-            case ${ARCH} in
-              amd64 )
-                log_msg "creating 64-bit ISO with xorriso"
-                ${CREATEISO} -as mkisofs \
-                  -isohybrid-mbr ${WORKDIR}/ISOTMP/isolinux/isohdpfx.bin \
-                  -partition_offset 16 \
-                  -cache-inodes -J -l \
-                  -iso-level 3 \
-                  -V "${LIVECDLABEL}" \
-                  -c isolinux/boot.cat \
-                  -b isolinux/isolinux.bin \
-                  -no-emul-boot \
-                  -boot-load-size 4 \
-                  -boot-info-table \
-                  -eltorito-alt-boot \
-                  -e boot/grub/efi.img \
-                  -no-emul-boot \
-                  -isohybrid-gpt-basdat \
-                  -isohybrid-apm-hfsplus \
-                  -o ${WORKDIR}/${CUSTOMISO} "${WORKDIR}/ISOTMP" 2>>${WORKDIR}/bodhibuilder.log 1>>${WORKDIR}/bodhibuilder.log
-              ;;
-              * ) # 32-bit arch using xorriso
-                log_msg "creating 32-bit ISO with xorriso"
-                ${CREATEISO} -as mkisofs \
-                  -isohybrid-mbr ${WORKDIR}/ISOTMP/isolinux/isohdpfx.bin \
-                  -partition_offset 16 \
-                  -cache-inodes -J -l \
-                  -iso-level 3 \
-                  -V "${LIVECDLABEL}" \
-                  -c isolinux/boot.cat \
-                  -b isolinux/isolinux.bin \
-                  -no-emul-boot \
-                  -boot-load-size 4 \
-                  -boot-info-table \
-                  -eltorito-alt-boot \
-                  -e boot/grub/efi.img \
-                  -no-emul-boot \
-                  -isohybrid-gpt-basdat \
-                  -isohybrid-apm-hfsplus \
-                  -o ${WORKDIR}/${CUSTOMISO} "${WORKDIR}/ISOTMP" 2>>${WORKDIR}/bodhibuilder.log 1>>${WORKDIR}/bodhibuilder.log
-              ;;
-            esac
-        ;;
-        *genisoimage|*mkisofs ) # 
-            log_msg "creating ISO with ${ISOCMD}"
-            # create the ISO
-            ${CREATEISO} -iso-level 3 -quiet -r -V "${LIVECDLABEL}" -cache-inodes -J -l -b isolinux/isolinux.bin -c isolinux/boot.cat -no-emul-boot -boot-load-size 4 -boot-info-table -o ${WORKDIR}/${CUSTOMISO} "${WORKDIR}/ISOTMP" 2>>${WORKDIR}/bodhibuilder.log 1>>${WORKDIR}/bodhibuilder.log
-        ;;
-    esac
-
-
-    if [ ! -f ${WORKDIR}/${CUSTOMISO} ] ; then
-        log_msg "The iso was not created. There was a problem. Exiting"
+      * ) # none of the three ISO creation programs are found on OS
+        log_msg "ERROR: xorriso, genisoimage, or mkisofs programs not found;"
+        log_msg "because of this the iso was not created. Exiting"
         exit 1
-    fi
-
-    log_msg "Copying apt-setup back to original"
-    if [ -f "/usr/share/ubiquity/apt-setup.0RIG" ] ; then
-        cp -f /usr/share/ubiquity/apt-setup.0RIG /usr/share/ubiquity/apt-setup
-    fi
-
-    # Make the iso hybrid so it can be simply dd copied to a usb flash drive.
-    case ${CREATEISO} in
-      *xorriso* ) # no need to make hybrid with xorriso
-        case ${ARCH} in
-          amd64 )
-            log_msg "================================================================================"
-            log_msg ""
-            log_msg "Good news, ${CUSTOMISO} was created using the xorriso package."
-            log_msg "You can now optionally use the following commands to make a medium"
-            log_msg "that is bootable in both UEFI or BIOS (non-UEFI) modes."
-            log_msg "  *Create a bootable CD or DVD:"
-            log_msg "    $ sudo xorrecord dev=/dev/sr0 speed=12 fs=8m blank=as_needed -eject padsize=300k ${WORKDIR}/${CUSTOMISO}"
-            log_msg "  *Create a bootable USB:"
-            log_msg "   (you will need to determine which device your USB has been assigned,"
-            log_msg "   Do not copy & paste this command directly without changing '/dev/sdX', it won't work."
-            log_msg "   dd CAN be dangerous ... now you've been warned.)"
-            log_msg "    $ sudo dd if=${WORKDIR}/${CUSTOMISO} of=/dev/sdX"
-            log_msg ""
-            log_msg "================================================================================"
-          ;;
-          * )
-            log_msg ""
-            log_msg "32-bit xorriso,  I don't really know what's going to happen with UEFI right now."
-            log_msg ""
-          ;;
-        esac
       ;;
-      * ) # if not using xorriso, need to make it a hybrid, but it still might not be uefi bootable
-        log_msg "Making ${CUSTOMISO} a hybrid iso"
-        #~ isohybrid ${WORKDIR}/${CUSTOMISO} # disable this when isohybrid has --uefi option available, as below command
-        isohybrid --uefi ${WORKDIR}/${CUSTOMISO} # enable this when isohybrid has --uefi option available
+    esac # end CREATEISO check
+  done # end isopass loop check
+
+
+  ## Now actually create the ISO
+  case ${CREATEISO} in
+      *xorriso* ) # 
+          # xorriso
+          #   - Can boot to ISO in either UEFI or non-UEFI mode when dd'd to a USB, CD or DVD
+          #   - Copy direct to CD or DVD using command:  sudo xorrecord dev=/dev/sr0 speed=12 fs=8m blank=as_needed -eject padsize=300k file.iso
+          #   - Copy direct to USB using command:  sudo dd if=file.iso of=/dev/sdX
+          case ${ARCH} in
+            amd64 )
+              log_msg "creating 64-bit ISO with xorriso"
+              ${CREATEISO} -as mkisofs \
+                -isohybrid-mbr ${WORKDIR}/ISOTMP/isolinux/isohdpfx.bin \
+                -partition_offset 16 \
+                -cache-inodes -J -l \
+                -iso-level 3 \
+                -V "${LIVECDLABEL}" \
+                -c isolinux/boot.cat \
+                -b isolinux/isolinux.bin \
+                -no-emul-boot \
+                -boot-load-size 4 \
+                -boot-info-table \
+                -eltorito-alt-boot \
+                -e boot/grub/efi.img \
+                -no-emul-boot \
+                -isohybrid-gpt-basdat \
+                -isohybrid-apm-hfsplus \
+                -o ${WORKDIR}/${CUSTOMISO} "${WORKDIR}/ISOTMP" 2>>${WORKDIR}/bodhibuilder.log 1>>${WORKDIR}/bodhibuilder.log
+            ;;
+            * ) # 32-bit arch using xorriso
+              log_msg "creating 32-bit ISO with xorriso"
+              ${CREATEISO} -as mkisofs \
+                -isohybrid-mbr ${WORKDIR}/ISOTMP/isolinux/isohdpfx.bin \
+                -partition_offset 16 \
+                -cache-inodes -J -l \
+                -iso-level 3 \
+                -V "${LIVECDLABEL}" \
+                -c isolinux/boot.cat \
+                -b isolinux/isolinux.bin \
+                -no-emul-boot \
+                -boot-load-size 4 \
+                -boot-info-table \
+                -eltorito-alt-boot \
+                -e boot/grub/efi.img \
+                -no-emul-boot \
+                -isohybrid-gpt-basdat \
+                -isohybrid-apm-hfsplus \
+                -o ${WORKDIR}/${CUSTOMISO} "${WORKDIR}/ISOTMP" 2>>${WORKDIR}/bodhibuilder.log 1>>${WORKDIR}/bodhibuilder.log
+            ;;
+          esac
       ;;
-    esac
+      *genisoimage|*mkisofs ) # 
+          log_msg "creating ISO with ${ISOCMD}"
+          # create the ISO
+          ${CREATEISO} -iso-level 3 -quiet -r -V "${LIVECDLABEL}" -cache-inodes -J -l -b isolinux/isolinux.bin -c isolinux/boot.cat -no-emul-boot -boot-load-size 4 -boot-info-table -o ${WORKDIR}/${CUSTOMISO} "${WORKDIR}/ISOTMP" 2>>${WORKDIR}/bodhibuilder.log 1>>${WORKDIR}/bodhibuilder.log
+      ;;
+  esac
 
-    # create the md5 sum file so the user doesn't have to - this is good so the iso
-    # file can later be tested to ensure it hasn't become corrupted
-    log_msg "Creating ${CUSTOMISO}.md5 in ${WORKDIR}"
-    cd ${WORKDIR}
-    md5sum ${CUSTOMISO} > ${CUSTOMISO}.md5
-    sleep 1
-    # create the sha256 sum
-    log_msg "Creating ${CUSTOMISO}.sha256 in ${WORKDIR}"
-    cd ${WORKDIR}
-    sha256sum ${CUSTOMISO} > ${CUSTOMISO}.sha256
 
-    sleep 1
+  if [ ! -f ${WORKDIR}/${CUSTOMISO} ] ; then
+      log_msg "The iso was not created. There was a problem. Exiting"
+      exit 1
+  fi
 
-    ISOSIZE1="`ls -hs ${WORKDIR}/${CUSTOMISO} | awk '{print $1}'`"
-    ISOSIZE2="`ls -l ${WORKDIR}/${CUSTOMISO} | awk '{print $5}'`"
+  log_msg "Copying apt-setup back to original"
+  if [ -f "/usr/share/ubiquity/apt-setup.0RIG" ] ; then
+      cp -f /usr/share/ubiquity/apt-setup.0RIG /usr/share/ubiquity/apt-setup
+  fi
 
-    log_msg "  Custom ISO  ${WORKDIR}/${CUSTOMISO}  =  ${ISOSIZE1} (${ISOSIZE2})"
-    log_msg "    is ready to be burned or tested in a virtual machine."
+  # Make the iso hybrid so it can be simply dd copied to a usb flash drive.
+  case ${CREATEISO} in
+    *xorriso* ) # no need to make hybrid with xorriso
+      case ${ARCH} in
+        amd64 )
+          log_msg "================================================================================"
+          log_msg ""
+          log_msg "Good news, ${CUSTOMISO} was created using the xorriso package."
+          log_msg "You can now optionally use the following commands to make a medium"
+          log_msg "that is bootable in both UEFI or BIOS (non-UEFI) modes."
+          log_msg "  *Create a bootable CD or DVD:"
+          log_msg "    $ sudo xorrecord dev=/dev/sr0 speed=12 fs=8m blank=as_needed -eject padsize=300k ${WORKDIR}/${CUSTOMISO}"
+          log_msg "  *Create a bootable USB:"
+          log_msg "   (you will need to determine which device your USB has been assigned,"
+          log_msg "   Do not copy & paste this command directly without changing '/dev/sdX', it won't work."
+          log_msg "   dd CAN be dangerous ... now you've been warned.)"
+          log_msg "    $ sudo dd if=${WORKDIR}/${CUSTOMISO} of=/dev/sdX"
+          log_msg ""
+          log_msg "================================================================================"
+        ;;
+        * )
+          log_msg ""
+          log_msg "32-bit xorriso,  I don't really know what's going to happen with UEFI right now."
+          log_msg ""
+        ;;
+      esac
+    ;;
+    * ) # if not using xorriso, need to make it a hybrid, but it still might not be uefi bootable
+      log_msg "Making ${CUSTOMISO} a hybrid iso"
+      #~ isohybrid ${WORKDIR}/${CUSTOMISO} # disable this when isohybrid has --uefi option available, as below command
+      isohybrid --uefi ${WORKDIR}/${CUSTOMISO} # enable this when isohybrid has --uefi option available
+    ;;
+  esac
+
+  # create the md5 sum file so the user doesn't have to - this is good so the iso
+  # file can later be tested to ensure it hasn't become corrupted
+  log_msg "Creating ${CUSTOMISO}.md5 in ${WORKDIR}"
+  cd ${WORKDIR}
+  md5sum ${CUSTOMISO} > ${CUSTOMISO}.md5
+  sleep 1
+  # create the sha256 sum
+  log_msg "Creating ${CUSTOMISO}.sha256 in ${WORKDIR}"
+  cd ${WORKDIR}
+  sha256sum ${CUSTOMISO} > ${CUSTOMISO}.sha256
+
+  sleep 1
+
+  ISOSIZE1="`ls -hs ${WORKDIR}/${CUSTOMISO} | awk '{print $1}'`"
+  ISOSIZE2="`ls -l ${WORKDIR}/${CUSTOMISO} | awk '{print $5}'`"
+
+  log_msg "  Custom ISO  ${WORKDIR}/${CUSTOMISO}  =  ${ISOSIZE1} (${ISOSIZE2})"
+  log_msg "    is ready to be burned or tested in a virtual machine."
 }
 ##### END function iso #####
 

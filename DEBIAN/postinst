@@ -1,0 +1,12 @@
+#!/bin/bash
+#
+
+#~ # copy BB icon to other locations
+#~ if [ ! -d /usr/share/icons/hicolor/scalable/apps/ ] ; then
+  #~ mkdir /usr/share/icons/hicolor/scalable/apps/
+#~ fi
+#~ yes | cp /usr/share/icons/bodhibuilder-gtk.png /usr/share/icons/hicolor/scalable/apps/bodhibuilder-gtk.png
+
+
+
+exit 0
