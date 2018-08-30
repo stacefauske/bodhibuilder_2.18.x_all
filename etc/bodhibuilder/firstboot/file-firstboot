@@ -28,12 +28,16 @@ do_start() {
             # Remove ubiquity from menus
             sed -i -e 's/NoDisplay=false/NoDisplay=true/' /usr/share/applications/ubiquity.desktop
             sed -i -e 's/Hidden=false/Hidden=true/' /usr/share/applications/ubiquity.desktop
+
         # Create bodhibuilder desktop file for menus
         yes | cp -f /etc/bodhibuilder/applications/bodhibuilder-gtk.desktop /usr/share/applications/
 
         # Restore sources.list from source OS
         yes | mv /etc/apt/sources.list /etc/apt/sources.list_ORIG
         yes | mv /etc/bodhibuilder/apt/sources.list_BB /etc/apt/sources.list
+        sleep 1
+        # Remove any remaining cdrom repos that may be in sources.list
+        sed -i '/cdrom:/d' /etc/apt/sources.list &> /dev/null
 
         # blank out custom_repos file for next spin, cuz desired repos should be in sources.list now
         echo '' > /etc/bodhibuilder/apt/custom_repos
@@ -59,6 +63,7 @@ do_start() {
         # first time, and never again.
         #
         ### Place your custom commands below this line
+        
         
         ### Place your custom commands above this line
         ################################################
