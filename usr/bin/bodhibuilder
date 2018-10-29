@@ -576,50 +576,9 @@ cdfs (){
 
 
 
-  # gather info about custom repositories
-  #~ # Double check the custom repos in case CUSTOM_REPOS in the conf file gets mangled
-  CUSTOM_REPOS=`cat /etc/bodhibuilder/apt/custom_repos`
-  if [ "${CUSTOM_REPOS}" ] ; then
-    echo "CUSTOM_REPOS in /etc/bodhibuilder/apt/custom_repos =" >>${WORKDIR}/bodhibuilder.log
-    echo "${CUSTOM_REPOS}" >>${WORKDIR}/bodhibuilder.log
-    echo "" >>${WORKDIR}/bodhibuilder.log #T/S
-    #
-    # change the delimiter to 'newline' to use in the "for" loop
-    oldifs=$IFS
-    IFS=$'\n'
-    custom_repos_content=`cat /etc/bodhibuilder/apt/custom_repos | grep -i --color=none [a-z]`
-    echo "  custom_repos_content is" >>${WORKDIR}/bodhibuilder.log #T/S log
-    echo "${custom_repos_content}" >>${WORKDIR}/bodhibuilder.log #T/S log
-    echo "" >>${WORKDIR}/bodhibuilder.log #T/S log
-    z=1
-    for insert in ${custom_repos_content} ; do
-      echo -n "  ${z} insert is -->         " >>${WORKDIR}/bodhibuilder.log #T/S log
-      echo "${insert}" >>${WORKDIR}/bodhibuilder.log #T/S log
-      insert_grep=`echo "${insert}" | sed 's,\[,\\\[,g' | sed 's,\],\\\],g'`
-      echo -n "  ${z} insert_grep is -->    " >>${WORKDIR}/bodhibuilder.log #T/S log
-      echo "${insert_grep}" >>${WORKDIR}/bodhibuilder.log #T/S log
-      insert_exists=`grep "${insert_grep}" ${WORKDIR}/dummysys/etc/apt/sources.list`
-      echo -n "  ${z} insert_exists is -->  " >>${WORKDIR}/bodhibuilder.log #T/S log
-      echo "${insert_exists}" >>${WORKDIR}/bodhibuilder.log #T/S log
-      if [ ! "${insert_exists}" ] ; then
-        echo ${insert} >>${WORKDIR}/dummysys/etc/apt/sources.list
-      else
-        echo -e "  ${z} ${insert_exists}\n    not put into\n    ${WORKDIR}/dummysys/etc/apt/sources.list" >>${WORKDIR}/bodhibuilder.log #T/S log
-      fi
-      echo "" >>${WORKDIR}/bodhibuilder.log #T/S log
-      z=$((z+1))
-    done
-    # reset the delimiter back to its original default
-    IFS=$oldifs
-    ##~ echo ${CUSTOM_REPOS} >>${WORKDIR}/dummysys/etc/apt/sources.list
-  else
-    echo "No custom repo's in /etc/bodhibuilder/apt/custom_repos" >>${WORKDIR}/bodhibuilder.log
-  fi
-
-  # backup sources.list now that custom_repos have been added
+  # backup sources.list so it can be restored in the newly installed system
   yes | cp -p ${WORKDIR}/dummysys/etc/apt/sources.list ${WORKDIR}/dummysys/etc/bodhibuilder/apt/sources.list_BB
   #Adding packages location to sources
-  # note: custom_repos have already been added above
   DISKINFONAME=`echo $LIVECDLABEL | awk '{print $1}'`
   log_msg "Adding CD-ROM to source list"
   . /etc/lsb-release

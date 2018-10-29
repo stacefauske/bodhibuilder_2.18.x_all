@@ -1,4 +1,3 @@
 /etc/bodhibuilder.conf
-/etc/bodhibuilder/apt/custom_repos
 /etc/bodhibuilder/firstboot/file-firstboot
 /etc/bodhibuilder/grub/grub.bodhi

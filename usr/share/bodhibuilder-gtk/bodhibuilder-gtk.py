@@ -63,7 +63,7 @@ except:
 
 APP = "bodhibuilder"
 DIR = "/usr/share/locale"
-APP_VERSION = "2.18.3"
+APP_VERSION = "2.18.4"
 
 locale.setlocale(locale.LC_ALL, '')
 gettext.bindtextdomain(APP, DIR)
@@ -703,6 +703,9 @@ LIVECDLABEL="%(LIVECDLABEL)s"
 
 
 # Here you can change the name of the ISO file that is created
+#  I don't recommend spaces in this var due to it being used in a path location
+#  If you desire spaces or other characters, some form of REGEX formatting
+#  may work you'll have to test it out
 CUSTOMISO="%(CUSTOMISO)s"
 
 
@@ -744,12 +747,6 @@ DISTLOCALE="%(DISTLOCALE)s"
 # Choose the distribution name you want to show up in GRUB
 # This will also be the DISTRIB_DESCRIPTION in /etc/lsb-release
 DISTNAME="%(DISTNAME)s"
-
-# Custom repositories
-# If you want any additional repositories add them to the file mentioned below
-# Don't change the following line, it is here for logging and informational purposes only
-CUSTOM_REPOS=`cat /etc/bodhibuilder/apt/custom_repos`
-##### ^^^ Do not change the above line ^^^ #####
 
 ''' % ({
         "WORKDIR" : self.window1.get_widget("entry6").get_text(),

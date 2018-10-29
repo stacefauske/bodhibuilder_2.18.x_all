@@ -7,6 +7,16 @@
 #~ fi
 #~ yes | cp /usr/share/icons/bodhibuilder-gtk.png /usr/share/icons/hicolor/scalable/apps/bodhibuilder-gtk.png
 
+# remove custom_repos starting in v2.18.4
+if [ -e /etc/bodhibuilder/apt/custom_repos ] ; then
+  yes | rm -f /etc/bodhibuilder/apt/custom_repos
+fi
+if [ -e /etc/bodhibuilder/custom_repos ] ; then
+  yes | rm -f /etc/bodhibuilder/custom_repos
+fi
+
+# make sure an installation of BB doesn't run thru 'firstboot'
+(sleep 5 && update-rc.d -f bodhibuilder-firstboot remove) &
 
 
 exit 0

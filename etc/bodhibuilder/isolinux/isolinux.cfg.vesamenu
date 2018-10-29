@@ -5,21 +5,23 @@ timeout 100
 menu title __DISTNAME__ Live Disc Legacy / BIOS Mode Boot Options
 menu background splash.png
 menu color title 1;37;44 #c0ffffff #00000000 std
+menu color sel 1;32;40 #ff4da435 #ff000000 none
+menu color hotsel 1;32;40 #ff4da435 #ff000000 none
 
 label live
   menu label ^Legacy/BIOS Boot the __DISTNAME__ Desktop
   kernel /casper/vmlinuz
-  append  file=/cdrom/preseed/custom.seed boot=casper initrd=/casper/initrd.lz quiet splash --
+  append  noprompt file=/cdrom/preseed/custom.seed boot=casper initrd=/casper/initrd.lz quiet splash --
 
 label xforcevesa
   menu label ^Legacy/BIOS Boot __DISTNAME__ In Safe Graphics Mode
   kernel /casper/vmlinuz
-  append  file=/cdrom/preseed/custom.seed boot=casper nomodeset xforcevesa initrd=/casper/initrd.lz quiet splash --
+  append  noprompt file=/cdrom/preseed/custom.seed boot=casper nomodeset xforcevesa initrd=/casper/initrd.lz quiet splash --
 
 label live-install
   menu label ^Legacy/BIOS Direct Install __DISTNAME__
   kernel /casper/vmlinuz
-  append  file=/cdrom/preseed/custom.seed boot=casper only-ubiquity initrd=/casper/initrd.lz quiet splash ---
+  append  noprompt file=/cdrom/preseed/custom.seed boot=casper only-ubiquity initrd=/casper/initrd.lz quiet splash ---
   
 label memtest
   menu label ^Run memtest

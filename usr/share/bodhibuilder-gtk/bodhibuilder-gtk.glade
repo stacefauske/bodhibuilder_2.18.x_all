@@ -479,7 +479,11 @@
                   <widget class="GtkEntry" id="entry3">
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
-                    <property name="tooltip" translatable="yes">Here you can change the name of the ISO file that is created.</property>
+                    <property name="tooltip" translatable="yes">Here you can change the name of the ISO file that is created.
+  I don't recommend spaces in this var due to it being used
+  in a path location.  If you desire spaces or other
+  characters, some form of REGEX formatting may work,
+  you'll have to test it out</property>
                     <property name="invisible_char">●</property>
                     <property name="primary_icon_activatable">False</property>
                     <property name="secondary_icon_activatable">False</property>
