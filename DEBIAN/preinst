@@ -1,6 +1,11 @@
 #!/bin/bash
 #
 
+# completely remove the previous version of bodhibuilder
+# it shouldn't hurt anything to leave it, but I'd like to
+# remove it after v2.18.4
+dpkg -r bodhibuilder
+
 # remove leftover pool directory from before v2.18.2
 if [ -d /etc/bodhibuilder/uefi/pool/ ] ; then
   yes | rm -rf /etc/bodhibuilder/uefi/pool/
