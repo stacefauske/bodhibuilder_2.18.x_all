@@ -475,7 +475,7 @@ cdfs (){
   # Check and log the display manager in use:
   currentdm_path="`cat /etc/X11/default-display-manager`"
   currentdm=`basename ${currentdm_path}`
-  echo "Current Display Manager is ${currentdm}  @  ${currentdm_path}"
+  log_msg "Current Display Manager (currentdm) is ${currentdm}  @  ${currentdm_path}"
 
   #Disabling swapfile ?
   #~ swapoff -v /swapfile &> /dev/null
@@ -726,17 +726,7 @@ cdfs (){
           updatedb -l 1 -o ${WORKDIR}/dummysys/var/lib/mlocate/mlocate.db
       fi
 
-
-      # If lightdm has an autologin-user in lightdm.conf, change it to ${LIVEUSER}
-      if [ "${currentdm}" == "lightdm" ] ; then
-        if [ -f "${WORKDIR}/dummysys/etc/lightdm/lightdm.conf" ] ; then
-          ldm_auto_login_check=`grep -o 'autologin-user=' ${WORKDIR}/dummysys/etc/lightdm/lightdm.conf`
-          if [ "${ldm_auto_login_check}" ] ; then
-            sed -i "s/^autologin-user=.*\$/autologin-user=${LIVEUSER}/g" ${WORKDIR}/dummysys/etc/lightdm/lightdm.conf
-          fi
-        fi
-      fi
-
+      # moved lightdm autologin from here to below -- backup mode may change LIVEUSER
 
       log_msg "Cleaning up passwd, group, shadow and gshadow files for the live system"
 
@@ -764,7 +754,6 @@ cdfs (){
         echo ${LINE} | xargs -i sed -e 's/:{},/:/g' ${WORKDIR}/dummysys/etc/group.new3 > ${WORKDIR}/dummysys/etc/group
         rm -f ${WORKDIR}/dummysys/etc/group.new* &> /dev/null
       done
-
   fi
 
 
@@ -1040,14 +1029,24 @@ FOO
           fi
       done
 
-      LIVEUSER="`who -u | grep -v root | cut -d " " -f1| uniq`"
-      if [ "`who -u | grep -v root | cut -d " " -f1| uniq | wc -l`" != "1" ] ; then
-          LIVEUSER="`grep '^[^:]*:[^:]*:1000:' /etc/passwd | awk -F ":" '{ print $1 }'`"
+      log_msg "backup spin - checking for LIVEUSER  '${LIVEUSER}'"
+      liveuser_check=`grep ${LIVEUSER} /etc/passwd | cut -d: -f1`
+      if [ ! "${liveuser_check}" ] ; then
+        LIVEUSER="`who -u | grep -v root | cut -d " " -f1 | uniq`"
+        log_msg "liveuser_check failed, attempting to set based on current username '${LIVEUSER}'"
+        if [ "`who -u | grep -v root | cut -d " " -f1 | uniq | wc -l`" != "1" ] ; then
+            log_msg "couldn't find '${LIVEUSER}', attempting using default uid 1000"
+            LIVEUSER="`grep '^[^:]*:[^:]*:1000:' /etc/passwd | awk -F ":" '{ print $1 }'`"
+        fi
+      else
+        log_msg "LIVEUSER '${LIVEUSER}' was found"
       fi
 
       if [ "${LIVEUSER}" = "" ] ; then
           log_msg "Can't determine which user to use. Please logoff all users except for your main user and try again. Exiting."
           exit 1
+      else
+          log_msg "LIVEUSER set as  '${LIVEUSER}'"
       fi
 
       LIVEHOME=`grep ${LIVEUSER} /etc/passwd | awk -F ":" '{print $6}'`
@@ -1075,6 +1074,7 @@ FOO
           fi
       fi
   elif [ "${OPT1}" = "dist" ] ; then
+
       # copy over bb's ubiquity.desktop to the host system with the custom name 'Install ${LIVECDLABEL}'
       log_msg "copying over bodhibuilder's ubiquity.desktop to the host system with the custom name 'Install ${LIVECDLABEL}'"
       log_msg "- All available ubiquity files in /usr/share/applications/"
@@ -1098,6 +1098,37 @@ FOO
       sed -i "s/_LIVE_CD_LABEL_/${LIVECDLABEL}/" /usr/share/applications/ubiquity.desktop &> /dev/null
   fi # end $OPT1 = backup or dist
 
+
+  # If lightdm has an autologin-user in lightdm.conf, change it to ${LIVEUSER}
+  #   LIVEUSER may have been changed above if doing a backup mode
+  # !!! this needs work !!!
+  if [ "${currentdm}" == "lightdm" ] ; then
+    log_msg "dist mode -- found lightdm, LIVEUSER is  ${LIVEUSER}"
+    if [ -f "${WORKDIR}/dummysys/etc/lightdm/lightdm.conf" ] ; then
+      log_msg "found ${WORKDIR}/dummysys/etc/lightdm/lightdm.conf"
+      log_msg "     checking for autologin"
+      ldm_auto_login_check=`grep -o '^autologin-user=' ${WORKDIR}/dummysys/etc/lightdm/lightdm.conf`
+      if [ "${ldm_auto_login_check}" ] ; then
+        log_msg "found autologin"
+        sed -i "s/^autologin-user=.*\$/autologin-user=${LIVEUSER}/g" ${WORKDIR}/dummysys/etc/lightdm/lightdm.conf
+        ldm_auto_login_timeout_check=`grep -o '^autologin-user-timeout=' ${WORKDIR}/dummysys/etc/lightdm/lightdm.conf`
+        if [ "${ldm_auto_login_timeout_check}" ] ; then
+          log_msg "found autologin timeout"
+          sed -i "s/^autologin-user-timeout=.*\$/autologin-user-timeout=0/g" ${WORKDIR}/dummysys/etc/lightdm/lightdm.conf
+        else
+          log_msg "adding autologin timeout"
+          echo "autologin-user-timeout=0" >> ${WORKDIR}/dummysys/etc/lightdm/lightdm.conf
+        fi
+        log_msg "===== lightdm.conf ====="
+        cat ${WORKDIR}/dummysys/etc/lightdm/lightdm.conf | ${tee_log}
+        log_msg "========================"
+      else
+        log_msg "no autologin found in ${WORKDIR}/dummysys/etc/lightdm/lightdm.conf"
+      fi
+    fi
+  else
+    log_msg "did not find lightdm, currentdm =  ${currentdm}"
+  fi
 
   # copy the desktop install icon into the icons dir
   #~ if [ -e /usr/share/icons/bbinstall.png ] ; then
