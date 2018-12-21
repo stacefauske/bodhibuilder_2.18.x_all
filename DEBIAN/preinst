@@ -16,4 +16,9 @@ if [ -e /usr/share/applications/UBIQUITY.desktop_ORIG ] ; then
   yes | rm -f /usr/share/applications/UBIQUITY.desktop_ORIG
 fi
 
+# v 2.18.5 - got rid of bodhibuilder-skelcopy
+if [ -e /usr/bin/bodhibuilder-skelcopy ] ; then
+  yes | rm -f /usr/bin/bodhibuilder-skelcopy
+fi
+
 exit 0

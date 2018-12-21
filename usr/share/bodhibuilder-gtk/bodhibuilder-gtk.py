@@ -694,6 +694,11 @@ EXCLUDES="%(EXCLUDES)s"
 
 
 # Here you can change the livecd/dvd username
+#  In a 'dist' spin, this will be both the username and password.
+#  In a 'backup' spin AND if lightdm autologin is enabled:
+#  this will be the first attempted username for autlogin, if
+#  this username is not found the currently logged-in username
+#  will be used for autologin.
 LIVEUSER="%(LIVEUSER)s"
 
 

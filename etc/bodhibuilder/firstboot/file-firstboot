@@ -15,7 +15,7 @@ PATH=/sbin:/usr/sbin:/bin:/usr/bin:/usr/local/bin:/usr/local/sbin
 
 do_start() {
     #REM302
-    if [ "`cat /proc/cmdline | grep casper`" = "" ]; then # run thru this if it's not an ISO
+    if [ "`cat /proc/cmdline | grep casper`" = "" ]; then # run thru this if it's NOT an ISO
         [ "$VERBOSE" != no ] && log_begin_msg "Running bodhibuilder-firstboot"
         # Removes this script from boot:
         (sleep 60 && update-rc.d -f bodhibuilder-firstboot remove) &
@@ -62,7 +62,7 @@ do_start() {
         ES=$?
         [ "$VERBOSE" != no ] && log_end_msg $ES
         return $ES
-    else
+    else # run through this if it IS an ISO
         logger bodhibuilder ISO booted
         sleep 1
         # Remove any cdrom: repos that may be in sources.list

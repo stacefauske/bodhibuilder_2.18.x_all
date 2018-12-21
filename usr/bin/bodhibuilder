@@ -44,10 +44,13 @@ fi
 
 
 # load the bodhibuilder version
+#  var = BODHIBUILDERVERSION
 . /etc/bodhibuilder/bodhibuilder.version
 
 
 # load the bodhibuilder.conf file
+#  vars = WORKDIR  EXCLUDES  LIVEUSER  LIVECDLABEL  CUSTOMISO  SQUASHFSOPTS
+#         BACKUPSHOWINSTALL  LIVECDURL  DISTICONS  DISTLOCALE  DISTNAME
 . /etc/bodhibuilder.conf
 
 # If helper or clean is all that's needed, just go ahead and do that
@@ -110,11 +113,12 @@ cd ${WORKDIR}
 
 # create bodhibuilder.log
 if [ -f ${WORKDIR}/bodhibuilder.log ] ; then
-    rm -f ${WORKDIR}/bodhibuilder.log &> /dev/null
+    #~ rm -f ${WORKDIR}/bodhibuilder.log &> /dev/null
+    echo -e "\n\n\n\n== bodhibuilder.log file already exists\n== not removing log file, just adding to it\n" >> ${WORKDIR}/bodhibuilder.log
 fi
 
 touch ${WORKDIR}/bodhibuilder.log
-cat > ${WORKDIR}/bodhibuilder.log <<FOO
+cat >> ${WORKDIR}/bodhibuilder.log <<FOO
 
        ===============================
        ==  bodhibuilder  log  file  ==
@@ -130,6 +134,38 @@ log_msg() {
     echo "$1" >>${WORKDIR}/bodhibuilder.log
 }
 tee_log="tee -a ${WORKDIR}/bodhibuilder.log" # send to both std output & logfile
+
+
+# What type of remaster is it?
+case $1  in
+    backup|-b )
+        log_msg "System Backup Mode Selected"
+        OPT1="backup"
+        if [ "${CUSTOMISO}" == "bodhibuilder.iso" ] ; then
+          CUSTOMISO="bodhibuilder_backup.iso"
+        fi
+    ;;
+    clean|-c )
+        echo "Removing the build directory now..."
+        rm -rf ${WORKDIR}
+        echo "Done...Exiting"
+        exit 0
+    ;;
+    dist|-d )
+        log_msg "Distribution Mode Selected"
+        OPT1="dist"
+        if [ "${CUSTOMISO}" == "bodhibuilder.iso" ] ; then
+          CUSTOMISO="bodhibuilder_dist.iso"
+        fi
+    ;;
+    * )
+        man bodhibuilder
+        exit 1
+        #~ helper
+        #~ exit 1
+    ;;
+esac
+
 
 ##### Gather info #####
 # what kind of disk space are we dealing with to begin?
@@ -247,37 +283,6 @@ if [ ! "${CUSTOMISO}" ] ; then # if we still don't have an iso name
 fi
 
 
-# What type of remaster is it?
-case $1  in
-    backup|-b )
-        log_msg "System Backup Mode Selected"
-        OPT1="backup"
-        if [ "${CUSTOMISO}" == "bodhibuilder.iso" ] ; then
-          CUSTOMISO="bodhibuilder_backup.iso"
-        fi
-    ;;
-    clean|-c )
-        echo "Removing the build directory now..."
-        rm -rf ${WORKDIR}
-        echo "Done...Exiting"
-        exit 0
-    ;;
-    dist|-d )
-        log_msg "Distribution Mode Selected"
-        OPT1="dist"
-        if [ "${CUSTOMISO}" == "bodhibuilder.iso" ] ; then
-          CUSTOMISO="bodhibuilder_dist.iso"
-        fi
-    ;;
-    * )
-        man bodhibuilder
-        exit 1
-        #~ helper
-        #~ exit 1
-    ;;
-esac
-
-
 # check for UID and/or GID 990 being already used on a dist build
 # we need these ID's 
 if [ "${OPT1}" == "dist" ] ; then
@@ -392,6 +397,13 @@ cdfs (){
   #   NOTE: May need to change this check to look for one of these env vars instead:
   #         $XDG_CURRENT_DESKTOP  -or-  $DESKTOP_SESSION
   #   NOTE: For now, just to avoid problems, just install the gtk frontend (kde code commented out)
+
+  # first, save a currently present ubiquity.desktop so we can restore it after installing ubiquity-frontend-gtk
+  if [ -e /usr/share/applications/ubiquity.desktop ] ; then
+    yes | mv -v /usr/share/applications/ubiquity.desktop /usr/share/applications/ubiquity.desktop_TEMP | ${tee_log}
+  fi
+  
+
   #
   #~ if [ "`ps axf | grep startkde | grep -v grep`" != "" -o "`ps axf | grep kwin | grep -v grep`" != "" ] ; then
   #~ if [ "`ps axf | grep -o -m1 startkde`" != "" -o "`ps axf | grep -o -m1 kwin`" != "" ] ; then
@@ -434,42 +446,12 @@ cdfs (){
       else
         echo "ubiquity-frontend-gtk installed -- re-check" >> ${WORKDIR}/bodhibuilder.log
       fi
-      ## Removing the changing of ubiquity.desktop in /usr/share/applications/
-      #~ chmod +x /usr/share/applications/ubiquity.desktop &> /dev/null
-      #~ chmod +x /usr/share/applications/ubiquity.desktop &>> ${WORKDIR}/bodhibuilder.log
-      #~ sed -i "s/sh -c 'ubiquity gtk_ui'/sudo ubiquity gtk_ui/" /usr/share/applications/ubiquity.desktop
   #~ fi
 
-
-  ### Don't check for lightdm anymore, just let whatever DM do it's thing
-  #     Keep this code here in case it needs to be implemented again
-  #
-  #~ #lightdm check - changed for 16.04
-  #~ # Check if they are using lightdm and if it is setup properly for the live default session
-  #~ #   Need to change this section a little
-  #~ #   lightdm has changed a bit in 16.04, and the running of 'accountsservice' also means that 'lightdm.conf' file will not be read
-  #~ #    but rather a file in /etc/lightdm/lightdm.conf.d/ such as 50-ubuntu.conf
-  #~ if [ "`grep lightdm /etc/X11/default-display-manager`" == "" ] ; then
-    #~ log_msg "Lightdm not setup properly. You must set your default desktop with lightdm prior to remastering" 
-    #~ exit 1
-  #~ fi
-  #~ 
-  #~ # this test may be irrelevant in 16.04
-  #~ if [ ! -f /etc/lightdm/lightdm.conf ] ; then
-    #~ log_msg "Lightdm not setup properly for a default session. Missing file /etc/lightdm/lightdm.conf. You must set your default desktop with lightdm prior to remastering"
-    #~ exit 1
-  #~ fi
-  #~ # maybe create a default 51-bb.conf file to put into /etc/lightdm/lightdm.conf.d/ and then change it to this:
-  #~ ##~ if [ ! -f /etc/lightdm/lightdm.conf.d/51-bb.conf ] ; then
-    #~ ##~ log_msg "Lightdm not setup properly for a default session. Missing bb file in /etc/lightdm/lightdm.conf.d/. You must set your default desktop with lightdm prior to remastering"
-    #~ ##~ exit 1
-  #~ ##~ fi
-  #~ 
-  #~ if [ ! -f /usr/share/xsessions/*.desktop ] ; then
-    #~ log_msg "Lightdm not setup properly. Missing a (session).desktop file in /usr/share/xsessions/. Exiting."
-    #~ exit 1
-  #~ fi
-  #~ log_msg "Lightdm detected"
+  # now, restore a ubiquity.desktop if it was saved before installing ubiquity-frontend-gtk
+  if [ -e /usr/share/applications/ubiquity.desktop_TEMP ] ; then
+    yes | mv -v /usr/share/applications/ubiquity.desktop_TEMP /usr/share/applications/ubiquity.desktop | ${tee_log}
+  fi
 
 
   # Check and log the display manager in use:
@@ -583,12 +565,7 @@ cdfs (){
   log_msg "Adding CD-ROM to source list"
   . /etc/lsb-release
   sed -i '/cdrom:/d' ${WORKDIR}/dummysys/etc/apt/sources.list &> /dev/null
-  #~ if [ "${ARCH}" == "amd64" ] ; then
-    echo "deb [trusted=yes] file:/cdrom/dists/ ./  # ISO repo - BB" >> ${WORKDIR}/dummysys/etc/apt/sources.list
-  #~ else
-    #~ ##~ echo "deb cdrom:[${DISKINFONAME} ${DISTRIB_RELEASE} - Release ${ARCH}]/ dists/" >> ${WORKDIR}/dummysys/etc/apt/sources.list
-    #~ echo "deb cdrom:[${DISKINFONAME} ${DISTRIB_RELEASE} - Release ${ARCH}]/dists/ ./ # ISO repo - BB" >> ${WORKDIR}/dummysys/etc/apt/sources.list
-  #~ fi
+  echo "deb [trusted=yes] file:/cdrom/dists/ ./  # ISO repo - BB" >> ${WORKDIR}/dummysys/etc/apt/sources.list
   echo "-- File Content of  ${WORKDIR}/dummysys/etc/apt/sources.list --" >> ${WORKDIR}/bodhibuilder.log
   cat ${WORKDIR}/dummysys/etc/apt/sources.list >> ${WORKDIR}/bodhibuilder.log
   echo "" >> ${WORKDIR}/bodhibuilder.log
@@ -658,8 +635,7 @@ cdfs (){
   rm -f ${WORKDIR}/dummysys/etc/ssh/*key*
   rm -f ${WORKDIR}/dummysys/var/lib/dbus/machine-id
   rsync -a /dev/urandom ${WORKDIR}/dummysys/dev/
-  # fix - this rm is screwing up permissions & ownerships for log files, so removing the find in "${WORKDIR}/dummysys/var/log/"
-  #~ find ${WORKDIR}/dummysys/var/log/ ${WORKDIR}/dummysys/var/lock/ ${WORKDIR}/dummysys/var/backups/ ${WORKDIR}/dummysys/var/tmp/ ${WORKDIR}/dummysys/var/crash/ ${WORKDIR}/dummysys/var/lib/ubiquity/ -type f -exec rm -f {} \;
+
   find ${WORKDIR}/dummysys/var/lock/ ${WORKDIR}/dummysys/var/backups/ ${WORKDIR}/dummysys/var/tmp/ ${WORKDIR}/dummysys/var/crash/ ${WORKDIR}/dummysys/var/lib/ubiquity/ -type f -exec rm -f {} \;
 
 
@@ -796,24 +772,14 @@ cdfs (){
     apt-get install -y -q --no-install-recommends dpkg-dev >>${WORKDIR}/bodhibuilder.log #CHARLES
 
 
-    # packages to be downloaded and moved into pool: -- 32/64-bit -- ONE directory
-    #~ if [ "${UBUVERSION}" -le 14 ] ; then # legacy list of packages for Ubuntu 14.x and earlier
-      #~ dlpkg_32="b43-fwcutter bcmwl-kernel-source dkms efibootmgr fakeroot grub-common grub-efi grub-efi-amd64 grub-efi-amd64-bin grub-efi-ia32 grub-efi-ia32-bin grub-pc grub-pc-bin grub2-common libfakeroot libuniconf4.6 libwvstreams4.6-base libwvstreams4.6-extras lupin-support mouseemu oem-config oem-config-gtk oem-config-slideshow-ubuntu secureboot-db setserial user-setup wvdial" # 32-bit packages
-      #~ dlpkg_64="grub-efi-amd64-signed shim shim-signed" # 64-bit packages
-    #~ elif [ "${UBUVERSION}" -le 16 ] ; then # list of packages for Ubuntu 16.x
-      #~ dlpkg_32="b43-fwcutter bcmwl-kernel-source dkms efibootmgr fakeroot grub-common grub-efi grub-efi-amd64 grub-efi-amd64-bin grub-efi-ia32 grub-efi-ia32-bin grub-pc grub-pc-bin grub2-common libfakeroot libuniconf4.6 libwvstreams4.6-base libwvstreams4.6-extras lupin-support mokutil mouseemu oem-config oem-config-gtk oem-config-slideshow-ubuntu sbsigntool secureboot-db setserial user-setup wvdial" # 32-bit packages
-      #~ dlpkg_64="grub-efi-amd64-signed shim shim-signed" # 64-bit packages
-    #~ else # Ubuntu 18.x
-
-      # New in U18.x, use the 00_packages.list files to determine which debs to download. Managing this list in those files now.
-      if [ "${ARCH}" == "amd64" ] ; then
-          ##~ dlpkg_64=`cat /etc/bodhibuilder/debs/amd64/00_packages.list`
-          dlpkg_all=`cat /etc/bodhibuilder/debs/amd64/00_packages.list`
-      else
-          ##~ dlpkg_32=`cat /etc/bodhibuilder/debs/i386/00_packages.list`
-          dlpkg_all=`cat /etc/bodhibuilder/debs/i386/00_packages.list`
-      fi
-    #~ fi
+    # New in U18.x, use the 00_packages.list files to determine which debs to download. Managing this list in those files now.
+    if [ "${ARCH}" == "amd64" ] ; then
+        ##~ dlpkg_64=`cat /etc/bodhibuilder/debs/amd64/00_packages.list`
+        dlpkg_all=`cat /etc/bodhibuilder/debs/amd64/00_packages.list`
+    else
+        ##~ dlpkg_32=`cat /etc/bodhibuilder/debs/i386/00_packages.list`
+        dlpkg_all=`cat /etc/bodhibuilder/debs/i386/00_packages.list`
+    fi
 
     dlpkgfail="0"
     log_msg "  downloading latest deb files for ${ARCH} packages:"
@@ -934,18 +900,6 @@ cdfs (){
   log_msg "Copying memtest86+ for the live system"
   cp /boot/memtest86+.bin ${WORKDIR}/ISOTMP/install/memtest
 
-  ##### not booting to vmlinuz.efi, just vmlinuz 8/19/2018
-  #~ # BB EFI BOOT
-  #~ # Customize file '/etc/bodhibuilder/isolinux/isolinux.cfg.vesamenu' to point to vmlinuz.efi
-
-  #~ ## Just make it vmlinuz.efi:
-  #~ # (Reason to do this -- /etc/bodhibuilder/uefi/boot/grub/grub.cfg file points to vmlinuz.efi,
-  #~ #  as does /etc/bodhibuilder/isolinux/isolinux.cfg.vesamenu, by default. So far, vmlinuz.efi
-  #~ #  has not hurt anything even if it's not a remaster in a UEFI booted system.)
-  #~ # Forget the above stuff, and have isolinux just point to vmlinuz.efi like this:
-  #~ log_msg "Ensuring isolinux.cfg.vesamenu is UEFI bootable (vmlinuz.efi)"
-  #~ sed -i 's/vmlinuz$/vmlinuz\.efi/g' /etc/bodhibuilder/isolinux/isolinux.cfg.vesamenu
-
 
   # check and see if they have a custom isolinux already setup. eg. they copied over
   # the isolinux folder from their original livecd or made a custom one for their distro
@@ -1052,6 +1006,10 @@ FOO
       LIVEHOME=`grep ${LIVEUSER} /etc/passwd | awk -F ":" '{print $6}'`
       if [ "${BACKUPSHOWINSTALL}" = "1" ] ; then
           # copy the install icon to the sudo users desktop
+          #  NOTE -- on a backup spin, the ubiquity icon on the Desktop may differ from the ubiquity
+          #          icon in the menus because we don't replace the ubiquity in
+          #          /usr/share/applications/, we just leave that as-is.
+          #          If I get some requests, I may also replace the latter ubiquity as well.
           log_msg "Copying the ubiquity install icon to the desktop of ${LIVEUSER}"
           if [ -e /etc/bodhibuilder/ubiquity/ubiquity.desktop ] ; then
             UBIQUITYDESKTOP="/etc/bodhibuilder/ubiquity/ubiquity.desktop"
@@ -1071,6 +1029,8 @@ FOO
               # set ubiquity.desktop as trusted
               sudo -i -u ${LIVEUSER} dbus-run-session -- gio set "/${LIVEHOME}/Desktop/`basename ${UBIQUITYDESKTOP}`" metadata::trusted yes
               echo "ubiquity command:  `grep -i exec= ${UBIQUITYDESKTOP}`" >>${WORKDIR}/bodhibuilder.log
+          else
+              echo "could not find a ubiquity.desktop to put on the Desktop" >>${WORKDIR}/bodhibuilder.log
           fi
       fi
   elif [ "${OPT1}" = "dist" ] ; then
@@ -1080,14 +1040,9 @@ FOO
       log_msg "- All available ubiquity files in /usr/share/applications/"
       ls -l /usr/share/applications/UBIQUITY* >>${WORKDIR}/bodhibuilder.log
       ls -l /usr/share/applications/ubiquity* >>${WORKDIR}/bodhibuilder.log
-      #~ if [ ! -e /usr/share/applications/UBIQUITY.desktop_ORIG ] ; then
-        log_msg "- rename original ubiquity.desktop to ubiquity.desktop_ORIG"
-        find /usr/share/applications -name 'ubiquity.desktop' -execdir mv -v '{}' ubiquity.desktop_ORIG \; >>${WORKDIR}/bodhibuilder.log
-        chmod 644 /usr/share/applications/ubiquity.desktop_ORIG
-      #~ fi
-      #~ if [ -e /usr/share/applications/UBIQUITY.desktop ] ; then
-        #~ yes | rm -vrf /usr/share/applications/UBIQUITY.desktop >>${WORKDIR}/bodhibuilder.log
-      #~ fi
+      log_msg "- rename original ubiquity.desktop to ubiquity.desktop_ORIG"
+      find /usr/share/applications -name 'ubiquity.desktop' -execdir mv -v '{}' ubiquity.desktop_ORIG \; >>${WORKDIR}/bodhibuilder.log
+      chmod 644 /usr/share/applications/ubiquity.desktop_ORIG
       # remove any UBIQUITY that's all CAPS
       if [ -e /usr/share/applications/UBIQUITY.desktop* ] ; then
         yes | rm -vf /usr/share/applications/UBIQUITY.desktop* | ${tee_log}
@@ -1130,12 +1085,6 @@ FOO
     log_msg "did not find lightdm, currentdm =  ${currentdm}"
   fi
 
-  # copy the desktop install icon into the icons dir
-  #~ if [ -e /usr/share/icons/bbinstall.png ] ; then
-    #~ if [ ! -e /usr/share/icons/bbinstall_previous.png ] ; then
-      #~ cp -f /usr/share/icons/bbinstall.png /usr/share/icons/bbinstall_previous.png
-    #~ fi
-  #~ fi
   echo "- copy install icon into icons dir" >>${WORKDIR}/bodhibuilder.log
   cp -vf /etc/bodhibuilder/ubiquity/bbinstall.png /usr/share/icons/bbinstall.png
 
@@ -1206,12 +1155,6 @@ FOO
 
 
   log_msg "Copying your kernel and initrd for the livecd"
-  ## Just make it vmlinuz.efi:
-  #   (As stated earlier, so far, vmlinuz.efi has not hurt anything 
-  #    even if it's not a remaster in a UEFI booted system.)
-  ##### not booting to vmlinuz.efi, just vmlinuz 8/19/2018
-  #~ log_msg "Creating casper/vmlinuz.efi"
-  #~ cp /boot/vmlinuz-`uname -r` ${WORKDIR}/ISOTMP/casper/vmlinuz.efi
   log_msg "Creating casper/vmlinuz"
   cp /boot/vmlinuz-`uname -r` ${WORKDIR}/ISOTMP/casper/vmlinuz
 
@@ -1248,12 +1191,6 @@ FOO
   #~ log_msg "Working in ${PWD}"
 
 
-  ##### not booting to vmlinuz.efi, just vmlinuz 8/19/2018
-  #~ #exit if missing vmlinuz.efi
-  #~ if [ ! -f ${WORKDIR}/ISOTMP/casper/vmlinuz.efi ] ; then
-      #~ log_msg "vmlinuz.efi not found in casper. Exiting"
-      #~ exit 1
-  #~ fi
   #exit if missing vmlinuz
   if [ ! -f ${WORKDIR}/ISOTMP/casper/vmlinuz ] ; then
       log_msg "vmlinuz not found in casper. Exiting"
